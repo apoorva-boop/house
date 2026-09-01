@@ -164,3 +164,44 @@ function reconcileCalendar_(nowMs: number): { removed: string[] } {
   }
   return { removed };
 }
+
+// ---------------------------------------------------------------------------
+// Reading the calendar back
+// ---------------------------------------------------------------------------
+// The calendar is not just an output. It is where the next due DATE actually lives, so
+// every sweep asks it what it says before it does anything else. These two functions are
+// the whole read side.
+
+/**
+ * When the calendar says this event starts, or `null` when the event is gone.
+ *
+ * `null` is a normal answer, not an error: somebody deleting a reminder they do not want
+ * is the household telling the app this chore is not currently scheduled, and that has
+ * to be readable without a throw.
+ */
+function eventStartMs_(eventId: string): number | null {
+  if (eventId === "") return null;
+  const event = calendarEventById_(eventId);
+  if (event === null) return null;
+  const start = event.getStartTime();
+  if (start === null || start === undefined) return null;
+  const ms = start.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * How far the event's start may sit from the row's `dueAt` before the sweep calls it a
+ * MOVE. One minute.
+ *
+ * Not zero, and this is the reason: the row stores an ISO instant with milliseconds,
+ * Google stores an event time to the second, so an event created from `dueAt` reads back
+ * up to 999 ms away from it without anybody having touched it. At a zero tolerance every
+ * sweep would score that echo as a drag, rewrite `dueAt`, clear `lastNotifiedAt`, and
+ * re-alert about the same chore every hour forever.
+ *
+ * A minute is far below any real edit — Google Calendar's own grid snaps to fifteen —
+ * and far above the rounding.
+ */
+function calendarDriftToleranceMs_(): number {
+  return 60_000;
+}

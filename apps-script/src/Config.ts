@@ -94,6 +94,8 @@ function sheetSchema_(): Record<string, string[]> {
       "leadTimeDays",
       "deletedAt",
     ],
+    // `scheduleState` is appended, never inserted: the header row is rewritten in place
+    // by `sheetFor_`, so a new column at the END leaves every existing cell where it is.
     Instances: [
       "instanceId",
       "choreId",
@@ -101,6 +103,7 @@ function sheetSchema_(): Record<string, string[]> {
       "calendarEventId",
       "lastNotifiedAt",
       "snoozedUntil",
+      "scheduleState",
     ],
     Completions: [
       "mutationId",

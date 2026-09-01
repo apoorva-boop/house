@@ -72,3 +72,41 @@ function findLiveChore_(choreId: string): SheetRow | null {
   const found = liveChoresById_()[choreId];
   return found === undefined ? null : found;
 }
+
+// ---------------------------------------------------------------------------
+// Is this occurrence still on the calendar?
+// ---------------------------------------------------------------------------
+// Google Calendar owns the DATE a chore is next due. The spreadsheet owns the recurrence
+// rule, the weights and every completion. That split only works if an event the
+// household DELETES means something on the row — and "nothing" is not an option, because
+// a row with no event and no marker would be handed a fresh event by the next sweep
+// within the hour. Deleting an event would be impossible.
+//
+// The marker is one column, `scheduleState`:
+//
+//   ""             Scheduled. The default, so every row written before this column
+//                  existed — and every row the integration suite seeds by hand — reads
+//                  as scheduled with no migration.
+//   "scheduled"    Scheduled, said out loud. What this server writes.
+//   "unscheduled"  The event is gone. `dueAt` keeps the LAST KNOWN date so the app can
+//                  say "was due Saturday" rather than showing a blank, and
+//                  `calendarEventId` is cleared because it points at nothing.
+//
+// A status column rather than a blank `dueAt`, because a blank `dueAt` already means
+// something else here: `instanceFromRow_` reads an unreadable date as "now", so an
+// unscheduled chore would look due this second and would be alerted about immediately.
+// The column is wiped by `test.clear` like every other cell, and it rides out to the
+// client on `opSnapshot_`, which returns `Instances` rows verbatim.
+
+function scheduleStateScheduled_(): string {
+  return "scheduled";
+}
+
+function scheduleStateUnscheduled_(): string {
+  return "unscheduled";
+}
+
+/** True when the household deleted this occurrence's event and nothing has replaced it. */
+function isUnscheduled_(row: SheetRow): boolean {
+  return asText_(row.values["scheduleState"]) === scheduleStateUnscheduled_();
+}

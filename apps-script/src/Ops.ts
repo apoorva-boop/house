@@ -82,28 +82,19 @@ function opComplete_(
     // OPEN occurrences only, which is what makes the sweep's idempotence rule — one
     // open instance per chore — decidable from the sheet alone.
     closeInstance_(instanceId);
-    advanceChore_(choreRow, chore, completedAt);
+    // Close, then schedule. The occurrence that was just done loses its event first, so
+    // the household never sees the old reminder and the new one on the calendar at the
+    // same time.
+    scheduleNextOccurrence_(choreRow, chore, completedAt);
     bumpVersion_();
     return { completion: row };
   });
 }
 
-/**
- * Moves the chore on to its next occurrence, using the domain's recurrence rule.
- *
- * The arithmetic is `Domain.nextDueFrom`, never a millisecond addition here: a monthly
- * chore due 09:00 local has to stay due 09:00 local across a daylight-saving change, and
- * 31 January plus a month has to be 28 February rather than 3 March. Both of those are
- * already solved in `packages/domain`, tested there, and shared with the client. A
- * second copy in Apps Script would drift.
- */
-function advanceChore_(choreRow: SheetRow, chore: DomainChore, completedAt: string): void {
-  if (chore.recurrence === null) return;
-  const lastDone = parseIso_(completedAt);
-  if (lastDone === null) return;
-  const ctx: DomainCtx = { now: lastDone, timeZone: householdTimeZone_() };
-  patchRow_("Chores", choreRow, { nextDueAt: toIso_(Domain.nextDueFrom(ctx, lastDone, chore)) });
-}
+// `advanceChore_` used to live here and only wrote `nextDueAt` back to the Chores row.
+// It has been replaced by `scheduleNextOccurrence_` in DueSweep.ts, which writes that
+// same date AND puts a single calendar event on it. Under calendar authority a next date
+// that exists only in a spreadsheet cell is a date nobody can see and nobody can move.
 
 // ---------------------------------------------------------------------------
 // chore.create / chore.update / chore.delete
