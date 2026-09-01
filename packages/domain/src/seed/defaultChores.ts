@@ -96,9 +96,20 @@ const CAR: readonly Chore[] = [
   deadline("car-rego", "Registration renewal", "car", w(1, 1, 5), "2027-01-31", 21, "linear"),
 ];
 
-/** A fresh copy every call, so a caller editing the list cannot mutate the seed. */
+/**
+ * A fresh copy every call, so a caller editing the list cannot mutate the seed.
+ *
+ * Every nested object is copied too, not just the top-level chore. A shallow spread would
+ * hand every caller the same `weight` and `recurrence` objects the module holds, and one
+ * screen letting a person drag a slider would silently change the seed for every later
+ * call — including the next person setting up the same house.
+ */
 export function defaultChores(): Chore[] {
-  return [...HOUSE, ...GARDEN, ...CAR].map((c) => ({ ...c, weight: { ...c.weight } }));
+  return [...HOUSE, ...GARDEN, ...CAR].map((c) => ({
+    ...c,
+    weight: { ...c.weight },
+    recurrence: c.recurrence === null ? null : { ...c.recurrence },
+  }));
 }
 
 /**

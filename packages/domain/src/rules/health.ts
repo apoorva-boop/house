@@ -90,6 +90,30 @@ function overdueDaysOf(ctx: DomainCtx, instance: ChoreInstance): number {
   return Math.max(0, (ctx.now - instance.dueAt) / MS_PER_DAY);
 }
 
+/** True once `ctx.now` has passed the instance's due date. A chore due tomorrow is not late. */
+export function isOverdue(ctx: DomainCtx, instance: ChoreInstance): boolean {
+  return overdueDaysOf(ctx, instance) > 0;
+}
+
+/**
+ * Whether all three sliders are readable numbers.
+ *
+ * `weight()` does arithmetic on the three sliders and clamps the result, but a clamp does
+ * not rescue a `NaN` — `Math.min(35, Math.max(5, NaN))` is still `NaN`. The sliders arrive
+ * from a spreadsheet cell through `Number(...)`, so a typo in a slider column reaches here
+ * as `NaN` and would otherwise turn a whole asset's condition into "NaN" on the screen.
+ *
+ * This is the only unguarded input left in the scoring path: `capDays`, `overdueDaysOf`
+ * and `asset.budget` all already fall back. Health and rescue are render paths, so they
+ * skip the offending chore rather than throwing the way `recurrence.ts` does — one
+ * unreadable row must not blank the map. Both report what they skipped so the caller can
+ * say so out loud instead of quietly under-reporting the backlog.
+ */
+export function hasReadableWeight(chore: Chore): boolean {
+  const w = chore.weight;
+  return Number.isFinite(w.time) && Number.isFinite(w.effort) && Number.isFinite(w.priority);
+}
+
 /** 0 when the chore has just come due, 1 once it has been late for its whole cap. */
 export function severity(ctx: DomainCtx, entry: OverdueChore): number {
   return Math.min(1, overdueDaysOf(ctx, entry.instance) / capDays(entry.chore));
@@ -115,21 +139,54 @@ export function burden(ctx: DomainCtx, entry: OverdueChore): number {
  * left for four hundred days costs its 7 points and no more, so the house stays in the
  * eighties. It takes a *backlog* to break the house, not one forgotten job.
  *
- * Entries belonging to another asset are ignored, so a caller may pass the whole overdue
- * list without slicing it per asset first. That is what keeps the garden's condition
- * independent of the house's.
+ * **Input contract: this function filters.** Entries belonging to another asset are
+ * ignored, so a caller may hand it the whole overdue list without slicing it per asset
+ * first. That is what keeps the garden's condition independent of the house's. Note that
+ * `rescue()` in this package does the opposite on purpose — it spans every asset — so do
+ * not assume the two take the same list for the same reason.
+ *
+ * A chore whose sliders are unreadable is skipped rather than scored, which means the
+ * number can understate the backlog. Use `healthReport` when you need to know that it did.
  *
  * The result is rounded to a whole number so the value shown to a person and the band
  * drawn on the map can never disagree at a boundary.
  */
 export function health(ctx: DomainCtx, asset: Asset, overdue: readonly OverdueChore[]): number {
+  return healthReport(ctx, asset, overdue).value;
+}
+
+/** `health` plus the ids of the chores it could not read. See `hasReadableWeight`. */
+export interface HealthReport {
+  /** The 0-100 condition score, over the chores that could be scored. */
+  readonly value: number;
+  /**
+   * Ids of chores on this asset whose sliders were unreadable, so they are missing from
+   * `value`. Non-empty means the score understates the backlog and the screen should say
+   * so — an empty array is the normal case.
+   */
+  readonly skipped: readonly string[];
+}
+
+/**
+ * `health()`, plus the chores it had to leave out.
+ *
+ * Same arithmetic and the same asset filter; the only difference is that this one hands
+ * back the unreadable rows instead of dropping them silently. Callers that render a number
+ * to a person should use this and surface `skipped`.
+ */
+export function healthReport(ctx: DomainCtx, asset: Asset, overdue: readonly OverdueChore[]): HealthReport {
   const budget = Number.isFinite(asset.budget) && asset.budget > 0 ? asset.budget : 1;
+  const skipped: string[] = [];
   let total = 0;
   for (const entry of overdue) {
     if (entry.chore.assetId !== asset.id) continue;
+    if (!hasReadableWeight(entry.chore)) {
+      skipped.push(entry.chore.id);
+      continue;
+    }
     total += burden(ctx, entry);
   }
-  return Math.max(0, Math.round(100 - (100 * total) / budget));
+  return { value: Math.max(0, Math.round(100 - (100 * total) / budget)), skipped };
 }
 
 /**
