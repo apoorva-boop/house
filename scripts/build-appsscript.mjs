@@ -74,6 +74,7 @@ const SERVER_FILES = [
   "Records.ts", // spreadsheet row -> domain value
   "CalendarChannel.ts", // NotificationSender, and Calendar as its first implementation
   "DueSweep.ts", // sole owner of instance materialisation
+  "Seed.ts", // the default chore list, with its dates computed from the server clock
   "Auth.ts", // person tokens, and the separately-gated test token
   "Ops.ts", // the production ops
   "TestSupport.ts", // the `test.*` namespace, inert unless TEST_MODE is "true"

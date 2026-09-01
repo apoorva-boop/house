@@ -62,6 +62,17 @@ declare const Domain: {
     instance: DomainInstance,
     policy: { repeatEveryHours: number | null },
   ): boolean;
+  /**
+   * The starting chore list, from `packages/domain/src/seed/defaultChores.ts`.
+   *
+   * The LIST is the domain's and is never restated on this side. The DATES on it are
+   * not: every `deadlineDate` in there is a hardcoded placeholder, and `Seed.ts`
+   * replaces each one with a date measured from this server's clock. See the header of
+   * `Seed.ts` for why the domain cannot compute them itself.
+   */
+  defaultChores(): DomainChore[];
+  /** Points per week each asset is worth, keyed by asset kind. */
+  readonly DEFAULT_BUDGETS: Record<string, number>;
 };
 
 // ---------------------------------------------------------------------------

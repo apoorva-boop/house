@@ -109,6 +109,8 @@ function dispatch_(
   switch (op) {
     case "complete":
       return opComplete_(identity, payload, mutationId);
+    case "household.seed":
+      return opHouseholdSeed_();
     case "chore.create":
       return opChoreCreate_(payload);
     case "chore.update":

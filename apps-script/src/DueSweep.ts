@@ -226,19 +226,52 @@ function scheduleNextOccurrence_(
   // below is the copy the household can see and drag.
   patchRow_("Chores", choreRow, { nextDueAt: nextDueIso });
 
+  return scheduleOccurrenceAt_(
+    choreRow,
+    chore.id,
+    nextDueMs,
+    "Next time this is due. Move this event to change the date.",
+  );
+}
+
+/**
+ * Opens ONE occurrence of a chore on a date the caller already knows, and puts a single
+ * calendar event on it.
+ *
+ * Extracted from `scheduleNextOccurrence_` above so that seeding a fresh household can
+ * reach it too. The two callers differ only in where the date comes from — the domain's
+ * recurrence arithmetic after a completion, or `Seed.ts`'s offset from the server clock
+ * at setup. Everything after that must be identical, and the way to keep it identical is
+ * for there to be one copy of it.
+ *
+ * Materialisation stays in THIS file. `Instances` rows are written here and in the sweep
+ * above, and nowhere else in the server: the moment a second file could open an
+ * occurrence, "how many occurrences of this chore are open" stops having one answer and
+ * the sweep's idempotence rule stops being decidable.
+ *
+ * The event goes out BEFORE the row is appended, for the reason spelled out on
+ * `scheduleNextOccurrence_`: the row must be able to carry the event id in the single
+ * write that creates it.
+ */
+function scheduleOccurrenceAt_(
+  choreRow: SheetRow,
+  choreId: string,
+  dueMs: number,
+  body: string,
+): string {
   const instanceId = newId_();
   const eventId = notificationSender_().send({
     instanceId,
     title: asText_(choreRow.values["title"]),
-    body: "Next time this is due. Move this event to change the date.",
-    dueAt: nextDueMs,
+    body,
+    dueAt: dueMs,
   });
 
   appendRows_("Instances", [
     {
       instanceId,
-      choreId: chore.id,
-      dueAt: nextDueIso,
+      choreId,
+      dueAt: toIso_(dueMs),
       calendarEventId: eventId,
       lastNotifiedAt: "",
       snoozedUntil: "",
