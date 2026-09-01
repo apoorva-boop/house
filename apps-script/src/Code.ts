@@ -1,61 +1,37 @@
-// ===========================================================================
-// DELIBERATE STUB. NOT AN IMPLEMENTATION. DO NOT BUILD ON IT.
-// ===========================================================================
-//
-// This file exists so the 21 integration tests in `apps-script/src/*.test.ts`
-// can fail on their ASSERTIONS instead of dying in `beforeAll` because there is
-// no endpoint to talk to. A suite that cannot reach its backend is broken, not
-// red, and a broken suite proves nothing about the code that replaces this file.
-//
-// So this endpoint is deliberately WELL-FORMED and deliberately WRONG:
-//   - it accepts the real transport (POST, `text/plain` body holding JSON),
-//   - it parses the real envelope (`{token, op, payload, mutationId}`),
-//   - it answers with the real response shape (`{ok, data, serverTime, version}`)
-//     and the real MIME type,
-//   - and it does NOTHING ELSE. No token check, no sheet read, no sheet write,
-//     no `getScriptLock()`, no `mutationId` dedupe, no server-side points, no
-//     calendar event, no DueSweep.
-//
-// Every op therefore returns `ok: true` with an empty `data`, which is the wrong
-// answer for all 21 tests. That is the point.
-//
-// WHAT REPLACES THIS FILE (plan section 3, `apps-script`):
-//   src/doPost.ts          envelope validation, token check, `getScriptLock()`,
-//                          `mutationId` dedupe then `instanceId` uniqueness,
-//                          server-computed `pointsAwarded` inside the lock
-//   src/doGet.ts           snapshot with real `version` and `serverTime`
-//   src/DueSweep.ts        sole owner of instance materialisation; `sweep.run`
-//   src/CalendarChannel.ts create/update/delete, tagging every event with
-//                          `extendedProperties.private.instanceId`
-//   plus the `test.*` support ops, which authenticate against the Script
-//   Property `TEST_TOKEN` rather than against a People row.
-//
-// Anyone implementing the above should DELETE the stub response below rather
-// than extend it. If the tests are still green against this file, they are not
-// testing anything.
+// The web app's entry points and op router.
 //
 // ---------------------------------------------------------------------------
-// Apps Script shape notes
+// Shape
 // ---------------------------------------------------------------------------
-// `doPost` and `doGet` must be TOP-LEVEL FUNCTION DECLARATIONS, which is what
-// makes them globals in the V8 runtime. They are NOT ES module exports: Apps
-// Script has no module system. `scripts/build-appsscript.mjs` transpiles this
-// file with esbuild's `transform` (not `bundle`), so nothing wraps it in an IIFE
-// and nothing rewrites it into `import`/`export`/`require`.
+// `doPost` and `doGet` must be TOP-LEVEL FUNCTION DECLARATIONS, which is what makes them
+// globals in the V8 runtime. They are NOT ES module exports: Apps Script has no module
+// system. `scripts/build-appsscript.mjs` transpiles every file in `apps-script/src` with
+// esbuild's `transform` (not `bundle`), so nothing wraps them in an IIFE and nothing
+// rewrites them into `import`/`export`/`require`. Every sibling file here is a script
+// too, and they all share one global scope — that is how `opComplete_`, `runDueSweep_`
+// and the rest are visible from this file with no import.
 //
 // The domain rules arrive separately as `globalThis.Domain`, from
-// `apps-script/build/domain.js` (`pnpm build:domain`). The stub does not use
-// them; the real implementation will.
+// `apps-script/build/domain.js` (`pnpm build:domain`), and are declared in `Config.ts`.
+//
+// ---------------------------------------------------------------------------
+// Transport
+// ---------------------------------------------------------------------------
+// The body arrives as `text/plain` holding JSON. That is not laziness: Apps Script
+// cannot answer a CORS preflight, and `application/json` makes the browser preflight and
+// fail. `text/plain` keeps the request "simple", so the PWA can post to it at all.
+//
+// Every response is HTTP 200 with `{ok, data, serverTime, version}` or
+// `{ok: false, error}`. Apps Script has no way to set a status code on a web app
+// response anyway, and a client that has to distinguish "the server said no" from "the
+// request never arrived" needs a parseable body either way. `data` is OMITTED on
+// failure — a client must not find a half-shaped payload sitting under an `ok: false`.
+//
+// NOTHING throws out of `doPost`. An uncaught exception renders Google's HTML error
+// page, which the client cannot parse and which reports as a transport failure rather
+// than the server error it is.
 
-// --- Ambient declarations --------------------------------------------------
-// `ContentService` and the rest of the Apps Script globals come from
-// `@types/google-apps-script`, wired in via `types` in `apps-script/tsconfig.json`.
-// That package is types-only: it emits nothing, so the deployed `.gs` is unchanged.
-// `GoogleAppsScript` is an ambient namespace, NOT an import — referencing it keeps
-// this file a script rather than turning it into a module, which is what lets Apps
-// Script see `doPost`/`doGet` as globals.
-
-/** The `e` Apps Script hands a web app. Only `postData.contents` matters here. */
+/** The `e` Apps Script hands a web app. Only `postData.contents` matters for POST. */
 interface WebAppEvent {
   postData?: { contents?: string; type?: string };
   parameter?: Record<string, string>;
@@ -83,39 +59,145 @@ function parseRequest_(e: WebAppEvent | undefined): RequestEnvelope {
   }
 }
 
-/**
- * The stub answer. Well-formed envelope, wrong content: `ok` is unconditionally
- * true and `data` is unconditionally empty, whatever the op was.
- */
-function stubEnvelope_(): string {
-  return JSON.stringify({
+function asPayload_(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function jsonOutput_(body: unknown): GoogleAppsScript.Content.TextOutput {
+  return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
+}
+
+function okEnvelope_(data: unknown): GoogleAppsScript.Content.TextOutput {
+  return jsonOutput_({
     ok: true,
-    data: {},
-    serverTime: new Date().toISOString(),
-    version: 0,
+    data,
+    serverTime: toIso_(Date.now()),
+    version: currentVersion_(),
   });
 }
 
-function jsonOutput_(body: string): GoogleAppsScript.Content.TextOutput {
-  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
+/** No `data` key at all, so a client cannot read a half-shaped payload off a failure. */
+function errorEnvelope_(message: string): GoogleAppsScript.Content.TextOutput {
+  return jsonOutput_({
+    ok: false,
+    error: message === "" ? "Request failed." : message,
+    serverTime: toIso_(Date.now()),
+    version: currentVersion_(),
+  });
+}
+
+function messageOf_(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+/**
+ * Routes one authenticated op.
+ *
+ * Authentication happens in `handleRequest_` BEFORE this is reached, and before any op
+ * has touched a row. A token check that runs after the write is not a check.
+ */
+function dispatch_(
+  identity: Identity,
+  op: string,
+  payload: Record<string, unknown>,
+  mutationId: string,
+): unknown {
+  switch (op) {
+    case "complete":
+      return opComplete_(identity, payload, mutationId);
+    case "chore.create":
+      return opChoreCreate_(payload);
+    case "chore.update":
+      return opChoreUpdate_(payload);
+    case "chore.delete":
+      return opChoreDelete_(payload);
+    case "sweep.run":
+      return opSweepRun_(payload);
+    case "calendar.reconcile":
+      return opCalendarReconcile_(payload);
+    case "snapshot":
+      return opSnapshot_();
+
+    // The test-support namespace. `authenticate_` has already refused every one of these
+    // unless TEST_MODE is "true" AND the token is TEST_TOKEN, so reaching this point is
+    // itself the authorisation.
+    case "test.clear":
+      return opTestClear_();
+    case "test.read":
+      return opTestRead_(payload);
+    case "test.write":
+      return opTestWrite_(payload);
+    case "test.update":
+      return opTestUpdate_(payload);
+    case "test.calendar.list":
+      return opTestCalendarList_(payload);
+    case "test.calendar.create":
+      return opTestCalendarCreate_(payload);
+
+    default:
+      throw new Error(`Unknown op "${op}".`);
+  }
+}
+
+function handleRequest_(envelope: RequestEnvelope): GoogleAppsScript.Content.TextOutput {
+  try {
+    const op = asText_(envelope.op);
+    const token = asText_(envelope.token);
+    const outcome = authenticate_(token, op);
+    if (outcome.identity === null) return errorEnvelope_(outcome.error);
+
+    return okEnvelope_(
+      dispatch_(outcome.identity, op, asPayload_(envelope.payload), asText_(envelope.mutationId)),
+    );
+  } catch (error) {
+    return errorEnvelope_(messageOf_(error));
+  }
 }
 
 function doPost(e: WebAppEvent): GoogleAppsScript.Content.TextOutput {
-  // Parsed so a malformed body cannot 500 and turn an assertion failure into a
-  // transport failure. The parsed value is deliberately discarded — routing on
-  // `op` is the next agent's job.
-  parseRequest_(e);
-  return jsonOutput_(stubEnvelope_());
+  try {
+    return handleRequest_(parseRequest_(e));
+  } catch (error) {
+    // Belt and braces. Even a failure inside the error path must come back as JSON.
+    return errorEnvelope_(messageOf_(error));
+  }
 }
 
+/**
+ * The same router over query parameters, so a browser can fetch a snapshot without a
+ * body. `payload` is a JSON string when a caller needs one.
+ */
 function doGet(e: WebAppEvent): GoogleAppsScript.Content.TextOutput {
-  parseRequest_(e);
-  return jsonOutput_(stubEnvelope_());
+  try {
+    const parameter = e && e.parameter ? e.parameter : {};
+    let payload: unknown = {};
+    const raw = asText_(parameter["payload"]);
+    if (raw !== "") {
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        return errorEnvelope_("`payload` is not valid JSON.");
+      }
+    }
+    const op = asText_(parameter["op"]);
+    return handleRequest_({
+      token: asText_(parameter["token"]),
+      op: op === "" ? "snapshot" : op,
+      payload,
+      mutationId: asText_(parameter["mutationId"]),
+    });
+  } catch (error) {
+    return errorEnvelope_(messageOf_(error));
+  }
 }
 
 // Apps Script calls these; nothing in this repo does. A top-level `function` in a
-// `.gs` file is already a global, so these two lines change nothing at runtime —
-// they state the contract, mirror `globalThis.Domain = Domain` in the domain
-// bundle, and stop the linter reporting the platform's entry points as dead code.
+// `.gs` file is already a global, so these lines change nothing at runtime — they state
+// the contract, mirror `globalThis.Domain = Domain` in the domain bundle, and stop the
+// linter reporting the platform's entry points as dead code.
 globalThis.doPost = doPost;
 globalThis.doGet = doGet;

@@ -6,9 +6,12 @@
 // airtight, and an orphaned event — one whose chore or instance is gone — is a
 // reminder for work nobody can tick off.
 //
-// Every event carries `extendedProperties.private.instanceId`. That tag is the
-// only thing that makes an orphan findable: without it a crashed run leaves an
-// event that nothing can ever match back to a row.
+// Every event carries the instance id as an event tag, written with `setTag` and
+// read back with `getTag`. That tag is the only thing that makes an orphan
+// findable: without it a crashed run leaves an event that nothing can ever match
+// back to a row. Which extended-properties namespace `setTag` uses is not
+// documented and has not been verified — it does not matter here, because these
+// events have no guests.
 
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from "vitest";
 import {

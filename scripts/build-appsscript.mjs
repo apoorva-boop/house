@@ -58,9 +58,27 @@ await mkdir(outDir, { recursive: true });
 // 1. The manifest. clasp requires it inside rootDir.
 await copyFile(resolve(repoRoot, "apps-script/appsscript.json"), resolve(outDir, "appsscript.json"));
 
-// 2. Every server file. One entry today; add filenames here as the real
-//    implementation lands (doPost.ts, doGet.ts, DueSweep.ts, CalendarChannel.ts).
-const SERVER_FILES = ["Code.ts"];
+// 2. Every server file.
+//
+//    All of these are SCRIPTS, not modules: no import, no export, one shared global
+//    scope. That is why the list is written out by hand rather than globbed — a stray
+//    `.ts` in src/ that happened to be a module would be pushed as a broken `.gs`, and
+//    the `*.test.ts` files next door must never be pushed at all.
+//
+//    Order is documentation, not a load order. Apps Script does not promise one, so no
+//    file here reads another file's top-level binding at load time; every shared
+//    constant is returned from a function for exactly that reason.
+const SERVER_FILES = [
+  "Config.ts", // schema, script properties, the ambient `Domain` declaration
+  "Store.ts", // row access, the script lock, the version counter
+  "Records.ts", // spreadsheet row -> domain value
+  "CalendarChannel.ts", // NotificationSender, and Calendar as its first implementation
+  "DueSweep.ts", // sole owner of instance materialisation
+  "Auth.ts", // person tokens, and the separately-gated test token
+  "Ops.ts", // the production ops
+  "TestSupport.ts", // the `test.*` namespace, inert unless TEST_MODE is "true"
+  "Code.ts", // doPost / doGet and the router
+];
 
 for (const file of SERVER_FILES) {
   const source = await readFile(resolve(srcDir, file), "utf8");

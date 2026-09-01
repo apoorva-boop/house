@@ -54,6 +54,43 @@ export default tseslint.config(
     },
   },
 
+  // The Apps Script server files are SCRIPTS, not modules.
+  //
+  // Apps Script has no module system. Every `.gs` file shares one global scope, and a
+  // top-level `function` declaration IS how the platform finds `doPost`, `doGet` and the
+  // trigger entry point. `scripts/build-appsscript.mjs` transpiles rather than bundles
+  // precisely so that stays true.
+  //
+  // Told they are modules, ESLint scopes each file to itself and reports every function
+  // called from a sibling file — which is most of them — as unused. That is a false
+  // report about a real deployment shape, so these files are described accurately
+  // instead.
+  //
+  // `sourceType: "script"` is the accurate description but is not on its own enough:
+  // typescript-eslint still reports an unreferenced top-level declaration in a global
+  // script, because it cannot see across files either way. So the unused check is
+  // additionally relaxed for names ending in `_`, which is the Apps Script convention
+  // for "internal to this project" — the underscore is what keeps a function out of the
+  // editor's Run menu, and here it also marks the names whose callers live in another
+  // file. Anything WITHOUT the underscore is still checked, which is what catches a
+  // genuinely orphaned entry point.
+  //
+  // `testkit.ts` and the `*.test.ts` files next door are excluded: they are genuine ES
+  // modules that run under vitest in Node and never reach Apps Script.
+  {
+    files: ["apps-script/src/**/*.ts"],
+    ignores: ["apps-script/src/**/*.test.ts", "apps-script/src/testkit.ts"],
+    languageOptions: {
+      sourceType: "script",
+    },
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_|_$" },
+      ],
+    },
+  },
+
   // The domain package is pure. This is the project's hardest constraint.
   {
     files: ["packages/domain/**/*.{ts,tsx}"],

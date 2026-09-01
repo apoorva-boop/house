@@ -85,3 +85,32 @@ await writeFile(
 );
 
 console.log(`wrote ${outPath} (scriptId from ${usedName}, rootDir apps-script/build)`);
+
+// Not everything a deployment needs lives in `.env`, and the parts that do not are the
+// parts people forget. Printed here rather than left in a comment because this is the
+// command someone runs while they are setting the project up, which is the only moment
+// the reminder is useful. Values, never printed — only which knob and where it lives.
+console.log(
+  [
+    "",
+    "Per-deployment configuration lives OUTSIDE .env. Set it once per Apps Script project.",
+    "",
+    "  Script properties (Project Settings -> Script Properties in the editor. Neither",
+    "  clasp nor the Apps Script API can write these, so a human has to):",
+    "    TEST_TOKEN    the value of APPS_SCRIPT_TEST_TOKEN. Authorises the test.* ops.",
+    "    TEST_MODE     exactly \"true\" to enable the test.* ops at all. NEVER set this on",
+    "                  a production deployment: test.clear wipes every tab and deletes",
+    "                  every event on the calendar.",
+    "    CALENDAR_ID   the notification calendar's id. Fallback only - see below.",
+    "",
+    "  The bound spreadsheet's Meta tab (preferred: the API can write these, so the test",
+    "  suite and a setup script can, and a fresh sheet needs no editor visit):",
+    "    { key: \"calendarId\", value: \"<calendar id>\" }",
+    "    { key: \"timeZone\",   value: \"Pacific/Auckland\" }",
+    "",
+    "  calendarId is read from Meta first and from the CALENDAR_ID property second. With",
+    "  neither set the server refuses to send rather than guessing a calendar - writing",
+    "  chore reminders into somebody's real diary is the worst thing this code could do.",
+    "  test.clear deliberately preserves the Meta calendarId row for the same reason.",
+  ].join("\n"),
+);
