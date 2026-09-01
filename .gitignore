@@ -1,3 +1,15 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+test-results/
+playwright-report/
 
 # Local planning docs — not part of the repo
 planning-gitignored/
+
+# Never commit credentials. The repo is public: person tokens, the Apps Script /exec
+# URL and VAPID keys are entered at install or live in Cloud Run's environment.
+.env
+.env.*
+.clasp.json
