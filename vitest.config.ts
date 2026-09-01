@@ -19,6 +19,14 @@ export default defineConfig({
           name: "integration",
           include: ["apps-script/**/*.test.ts", "relay/**/*.test.ts"],
           environment: "node",
+          // These 6 files must run serially: they all target the same Google
+          // spreadsheet and every one calls clearAll() in beforeEach, so parallel
+          // workers wipe each other's fixtures mid-test. `fileParallelism` can't be
+          // set here — vitest 3.2.7 excludes it from per-project config, it's
+          // root/CLI-only — so `--no-file-parallelism` lives on the
+          // `test:integration` script in package.json instead. Don't "optimise"
+          // this project back to parallel, and don't add fileParallelism here
+          // expecting it to do anything (it's silently dropped from ProjectConfig).
         },
       },
     ],

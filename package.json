@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "vitest run --project unit",
-    "test:integration": "vitest run --project integration",
+    "//test:integration": "--no-file-parallelism is required: all 6 integration files hit one Google Sheet and call clearAll() in beforeEach, so parallel workers wipe each other's fixtures. vitest's fileParallelism is a root/CLI-only setting (explicitly excluded from per-project config), so it cannot be set on the 'integration' project in vitest.config.ts and must live in this script instead. Do not remove, and do not move to the 'unit' project (which is pure and must stay parallel).",
+    "test:integration": "vitest run --project integration --no-file-parallelism",
     "e2e": "playwright test",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
