@@ -1,0 +1,112 @@
+# Deploys apps/web to GitHub Pages.
+#
+# The site is served at the repo path /house/, not at a domain root. That is not a
+# cosmetic choice: a service worker can only control pages at or below its own URL, so
+# public/sw.js must be served from /house/sw.js for the PWA to work offline. Every
+# asset path, the manifest scope and start_url must agree with that base.
+#
+# The real Vite build lands in PR 3 ("App without the map"). Until then the build step
+# below writes a one-page placeholder, so the workflow is deployable and testable now
+# and the real build slots straight in. The placeholder is gated on the sentinel file
+# `apps/web/.no-build-yet`, which PR 3 deletes; after that a failing build fails the
+# job rather than deploying the placeholder over a working site.
+#
+# main only. Feature branches must not deploy over a working site.
+
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. Do not cancel a running deploy — a half-finished Pages upload
+# is worse than a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # The repo path the site is served from. Vite reads this as `base` in PR 3.
+  BASE_PATH: /house/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build apps/web
+        # Two modes, decided by the `apps/web/.no-build-yet` sentinel file.
+        #
+        #   Sentinel PRESENT  (today): apps/web has no `build` script. Emit a
+        #                              placeholder page so this workflow is deployable
+        #                              and testable before the app exists.
+        #   Sentinel ABSENT   (PR 3+): the real Vite build must succeed. A failing
+        #                              build FAILS this job. It must never fall back to
+        #                              the placeholder, because that would deploy
+        #                              "Not built yet" over a working live site and
+        #                              exit 0.
+        #
+        # PR 3 ("App without the map") must delete apps/web/.no-build-yet in the same
+        # commit that adds the `build` script to apps/web/package.json. That single
+        # deletion flips this step from forgiving to strict.
+        run: |
+          set -euo pipefail
+
+          if [ ! -f apps/web/.no-build-yet ]; then
+            echo "No .no-build-yet sentinel - a real build is expected and must succeed."
+            pnpm --filter @house/web run build
+            if [ ! -f apps/web/dist/index.html ]; then
+              echo "::error::apps/web build produced no dist/index.html. Refusing to deploy a placeholder over the live site."
+              exit 1
+            fi
+            echo "Real build present at apps/web/dist/index.html."
+            exit 0
+          fi
+
+          echo "apps/web/.no-build-yet present - placeholder mode (real build: PR 3)."
+          # Catch the half-done handover: a build script exists but the sentinel was
+          # never deleted, so a real app would be silently replaced by the placeholder.
+          if node -e "process.exit(require('./apps/web/package.json').scripts?.build ? 0 : 1)"; then
+            echo "::error::apps/web/package.json declares a build script but apps/web/.no-build-yet still exists. Delete the sentinel - see the comment in that file."
+            exit 1
+          fi
+          mkdir -p apps/web/dist
+          cat > apps/web/dist/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>House &amp; Car Maintenance</title>
+          <p>Not built yet. The web app lands in PR 3.</p>
+          HTML
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

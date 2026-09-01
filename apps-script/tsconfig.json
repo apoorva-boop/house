@@ -1,0 +1,35 @@
+// The Apps Script server: IMPLEMENTATION ONLY. The integration suite that drives it
+// is a separate project, `tsconfig.test.json`, for one reason spelled out there.
+//
+// This project keeps EVERY strict flag inherited from the base — `noUncheckedIndexedAccess`
+// above all. The code that replaces the stub (doPost.ts, DueSweep.ts, CalendarChannel.ts)
+// reads rows straight out of a spreadsheet, where an unchecked index read is a live bug,
+// not a test annoyance. Do not relax a flag here to make a test compile; put the test in
+// the sibling project instead.
+//
+// `types` is set explicitly because the Apps Script globals arrive through no import:
+//   google-apps-script  SpreadsheetApp, CalendarApp, ContentService, PropertiesService,
+//                       LockService, Utilities, Session — the V8 runtime's globals.
+//                       Types only: it emits nothing, so the shipped .gs is unchanged.
+//   node                for any build-time Node surface; testkit.ts reads process.env
+//                       and node:crypto/fs/path/url.
+//
+// `apps-script/build/` is generated output (`pnpm build:appsscript`) and is excluded. It
+// is transpiled .js of what is already in src/, so checking it would mean checking
+// esbuild's output rather than ours.
+//
+// NOTE for whoever replaces the stub: src/Code.ts is a SCRIPT, not a module. It has no
+// import/export on purpose — `scripts/build-appsscript.mjs` transpiles it rather than
+// bundling it, so its top-level `function doPost`/`doGet` stay globals and Apps Script
+// can find them. Adding an import would turn the file into a module and break the
+// deployment. Reach for the ambient `GoogleAppsScript` namespace instead.
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["google-apps-script", "node"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts", "build", "dist"]
+}

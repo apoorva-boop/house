@@ -2,19 +2,32 @@
   "name": "house-maintenance-game",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "e2e": "playwright test",
     "typecheck": "tsc -b --pretty false",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build:domain": "node scripts/build-domain.mjs",
+    "build:appsscript": "node scripts/build-appsscript.mjs",
+    "build": "pnpm build:domain && pnpm build:appsscript",
+    "clasp:config": "node scripts/write-clasp-config.mjs",
+    "clasp:push": "pnpm build && pnpm clasp:config && clasp push"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@google/clasp": "^3.0.6",
     "@playwright/test": "^1.56.0",
+    "@types/google-apps-script": "^2.0.12",
     "@types/node": "^22.10.0",
+    "esbuild": "^0.25.12",
     "eslint": "^9.17.0",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.68.0",
     "vitest": "^3.0.0"
   }
 }
