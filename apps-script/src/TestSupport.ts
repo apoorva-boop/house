@@ -15,7 +15,7 @@
 // compiled into every deployment and are dead code in all but the test project.
 //
 // That gate is not belt-and-braces. `test.clear` wipes every data tab and deletes every
-// event on the calendar. Guarding it with a token alone would leave a data-wiping
+// event this server put on the calendar. Guarding it with a token alone would leave a data-wiping
 // endpoint live on a public URL for as long as the deployment exists, one leaked string
 // away from erasing a household's history. A property only a human can set, in a project
 // only Apoorva owns, is the difference between "hard to reach" and "not present".
@@ -26,7 +26,7 @@ function metaConfigKeys_(): string[] {
 }
 
 /**
- * Wipes every data tab and every event on the calendar.
+ * Wipes every data tab, and every event on the calendar THIS SERVER CREATED.
  *
  * `calendarId` is preserved. It is the deployment's configuration, not a fixture: the
  * suite never writes it, so clearing it would leave the server unable to find the
@@ -47,8 +47,12 @@ function opTestClear_(): unknown {
 
     let deletedEvents = 0;
     if (calendarId_() !== "") {
-      const window = calendarWindow_(Date.now());
-      for (const event of calendar_().getEvents(window.start, window.end)) {
+      // Only events this server created, found by the same tag `reconcileCalendar_` keys
+      // on. The unfiltered listing this replaced deleted everything in the window,
+      // including events a person had put there by hand — so a `CALENDAR_ID` pointed one
+      // character wrong, at somebody's real diary, would have emptied thirteen months of
+      // it on the next `clearAll()`. An untagged event is not ours to delete, ever.
+      for (const event of taggedEvents_(Date.now())) {
         event.deleteEvent();
         deletedEvents += 1;
       }

@@ -50,12 +50,12 @@ function opComplete_(
     const completions = readRows_("Completions");
 
     const replay = findRow_(completions, "mutationId", mutationId);
-    if (replay !== null) return { completion: replay.values };
+    if (replay !== null) return { completion: repairCompletion_(replay) };
 
     const claimed = findRow_(completions, "instanceId", instanceId);
     if (claimed !== null) {
       return {
-        completion: claimed.values,
+        completion: repairCompletion_(claimed),
         alreadyCompletedBy: asText_(claimed.values["personId"]),
       };
     }
@@ -78,21 +78,46 @@ function opComplete_(
     };
     appendRows_("Completions", [row]);
 
-    // The occurrence is over: cancel its reminder and drop the row. `Instances` holds
-    // OPEN occurrences only, which is what makes the sweep's idempotence rule — one
-    // open instance per chore — decidable from the sheet alone.
-    closeInstance_(instanceId);
-    // Close, then schedule. The occurrence that was just done loses its event first, so
-    // the household never sees the old reminder and the new one on the calendar at the
-    // same time.
-    scheduleNextOccurrence_(choreRow, chore, completedAt);
+    // The occurrence is over: cancel its reminder, drop the row, and move the chore on to
+    // whatever comes next. `Instances` holds OPEN occurrences only, which is what makes
+    // the sweep's idempotence rule — one open instance per chore — decidable from the
+    // sheet alone. Every step of this is in `settleCompletion_` rather than inline,
+    // because the replay path above has to be able to run exactly the same steps.
+    settleCompletion_(instanceId, chore.id, completedAt);
     bumpVersion_();
     return { completion: row };
   });
 }
 
+/**
+ * Finishes a completion that is already on the sheet, and hands back its row.
+ *
+ * The lock is not a transaction: a run can die between appending the Completions row and
+ * closing the occurrence, which commits the completion and leaves the occurrence open,
+ * the chore un-advanced and `version` unbumped — so the client sees nothing change and
+ * retries. Both early returns above are exactly where that retry lands, and an early
+ * return that only echoed the stored row left the household stuck there permanently.
+ *
+ * `settleCompletion_` is a no-op on a completion that already finished, so the ordinary
+ * replay still costs nothing but the read. The instanceId claim is untouched: it is still
+ * decided above, against the rows read inside the lock, and still admits one row per
+ * occurrence.
+ *
+ * The stored row, not the payload, decides what gets repaired. A retry with a mismatched
+ * body must not be able to point the repair at some other chore.
+ */
+function repairCompletion_(stored: SheetRow): Record<string, string> {
+  const settled = settleCompletion_(
+    asText_(stored.values["instanceId"]),
+    asText_(stored.values["choreId"]),
+    asText_(stored.values["completedAt"]),
+  );
+  if (settled) bumpVersion_();
+  return stored.values;
+}
+
 // `advanceChore_` used to live here and only wrote `nextDueAt` back to the Chores row.
-// It has been replaced by `scheduleNextOccurrence_` in DueSweep.ts, which writes that
+// It has been replaced by `settleChoreAfterCompletion_` in DueSweep.ts, which writes that
 // same date AND puts a single calendar event on it. Under calendar authority a next date
 // that exists only in a spreadsheet cell is a date nobody can see and nobody can move.
 

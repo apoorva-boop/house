@@ -187,6 +187,13 @@ function reconcileInstancesFromCalendar_(nowMs: number): {
       lastNotifiedAt: "",
       scheduleState: scheduleStateScheduled_(),
     });
+    // The CHORE's own copy of the date follows the event too, not just the occurrence's.
+    // Leaving it behind is what used to resurrect a chore: drag the warrant of fitness to
+    // the real date, tick it off there, and `nextDueAt` still held the setup placeholder —
+    // a date now in the past, with no open instance, which is exactly what the
+    // materialisation pass below re-materialises. The two dates describe the same thing
+    // and only ever disagree by accident.
+    syncChoreDueDate_(asText_(row.values["choreId"]), toIso_(startMs));
     rescheduled.push(instanceId);
   }
 
@@ -194,9 +201,15 @@ function reconcileInstancesFromCalendar_(nowMs: number): {
 }
 
 /**
- * Puts the chore's NEXT occurrence on the calendar, and writes the row that points at it.
+ * Moves a chore on from the completion that has just been recorded, and says whether it
+ * had to write anything to do it.
  *
- * Two things this deliberately is not.
+ * Two answers, by whether the chore repeats. A recurring chore gets its NEXT occurrence,
+ * on the calendar and in `Instances`. A one-off — a warrant of fitness, a registration —
+ * gets its `nextDueAt` cleared, because it is done and a stored date in the past is a
+ * standing instruction to the sweep to open it again.
+ *
+ * Two things the recurring branch deliberately is not.
  *
  * It is not a fixed schedule. The next date is measured from when the chore was DONE,
  * through `Domain.nextDueFrom`, never from the date it was supposed to be done. Clean the
@@ -215,18 +228,42 @@ function reconcileInstancesFromCalendar_(nowMs: number): {
  * a second event. A crash between the send and the append leaves a tagged event with no
  * row, which is exactly the orphan `calendar.reconcile` exists to remove.
  */
-function scheduleNextOccurrence_(
+function settleChoreAfterCompletion_(
   choreRow: SheetRow,
   chore: DomainChore,
   completedAt: string,
-): string | null {
-  if (chore.recurrence === null) return null;
+): boolean {
+  // A chore with no recurrence is FINISHED when it is done. The warrant of fitness is the
+  // case that matters: it has a deadline and no repeat, so there is no next date to
+  // compute — and leaving `nextDueAt` holding the old one is not neutral, because the
+  // materialisation pass above reads any stored date in the past, with no open instance,
+  // as "open this now". Completing it would put it straight back, overdue, on the next
+  // sweep, and on every sweep after that.
+  //
+  // Blank is the representation, rather than a new column or a done marker, because blank
+  // ALREADY means "nobody has scheduled this" in the only place that reads the field: the
+  // gate in `runDueSweep_` skips a chore whose `nextDueAt` will not parse. So the chore
+  // stays live, keeps its history and its `deadlineDate`, and comes back the moment
+  // somebody gives it a real date through `chore.update` — which reschedules as it writes.
+  if (chore.recurrence === null) {
+    if (asText_(choreRow.values["nextDueAt"]) === "") return false;
+    patchRow_("Chores", choreRow, { nextDueAt: "" });
+    return true;
+  }
+
   const lastDone = parseIso_(completedAt);
-  if (lastDone === null) return null;
+  if (lastDone === null) return false;
+
+  // Already settled. The state this branch produces is "an occurrence of this chore is
+  // open, due after the completion", so that state is also the test for whether the work
+  // has landed — read off the sheet rather than assumed from the caller. It is what lets
+  // `settleCompletion_` be run twice: a replayed completion repairs a half-finished one
+  // without stacking a second occurrence on top of a first that is already there.
+  if (hasOpenOccurrenceAfter_(chore.id, lastDone)) return false;
 
   const ctx: DomainCtx = { now: lastDone, timeZone: householdTimeZone_() };
   const nextDueMs = Domain.nextDueFrom(ctx, lastDone, chore);
-  if (!Number.isFinite(nextDueMs) || nextDueMs <= lastDone) return null;
+  if (!Number.isFinite(nextDueMs) || nextDueMs <= lastDone) return false;
   const nextDueIso = toIso_(nextDueMs);
 
   // The rule stays on the sheet. `nextDueAt` is the server's own copy of the date, kept
@@ -234,12 +271,62 @@ function scheduleNextOccurrence_(
   // below is the copy the household can see and drag.
   patchRow_("Chores", choreRow, { nextDueAt: nextDueIso });
 
-  return scheduleOccurrenceAt_(
+  scheduleOccurrenceAt_(
     choreRow,
     chore.id,
     nextDueMs,
     "Next time this is due. Move this event to change the date.",
   );
+  return true;
+}
+
+/** True when this chore already has an open occurrence due after `afterMs`. */
+function hasOpenOccurrenceAfter_(choreId: string, afterMs: number): boolean {
+  for (const row of filterRows_(readRows_("Instances"), "choreId", choreId)) {
+    const dueMs = parseIso_(row.values["dueAt"]);
+    if (dueMs !== null && dueMs > afterMs) return true;
+  }
+  return false;
+}
+
+/** Writes a chore's own `nextDueAt`, when it is not already the date asked for. */
+function syncChoreDueDate_(choreId: string, dueAtIso: string): void {
+  const choreRow = findLiveChore_(choreId);
+  if (choreRow === null) return;
+  if (asText_(choreRow.values["nextDueAt"]) === dueAtIso) return;
+  patchRow_("Chores", choreRow, { nextDueAt: dueAtIso });
+}
+
+/**
+ * Everything a completion has to do to the sheet BESIDES writing the Completions row —
+ * and every step of it a no-op once it has happened.
+ *
+ * `withScriptLock_` is a lock, not a transaction. `opComplete_` appends the completion
+ * and only then closes the occurrence and moves the chore on, so a quota error or the
+ * six-minute execution kill in between commits the completion and leaves the rest undone:
+ * the occurrence still open, no next date, `version` unbumped, so the client sees nothing
+ * change and retries. That retry carries the same `mutationId`, and a replay that only
+ * echoed the stored row left the household stuck there forever.
+ *
+ * So the finishing work lives here, both the fresh path and the replay path run it, and a
+ * replay REPAIRS. Nothing about the `instanceId` claim moves: that check still happens
+ * against the Completions rows read inside the lock, before any of this, and still admits
+ * exactly one row per occurrence.
+ *
+ * Returns whether the sheet actually moved, so a replay bumps `version` only when it did.
+ */
+function settleCompletion_(instanceId: string, choreId: string, completedAt: string): boolean {
+  // Close, then advance. The occurrence that was just done loses its event first, so the
+  // household never sees the old reminder and the new one at the same time.
+  let changed = closeInstance_(instanceId);
+
+  const choreRow = findLiveChore_(choreId);
+  // A chore retired since the completion has already had every occurrence closed by
+  // `chore.delete`, and a soft-deleted row has nothing left to advance.
+  if (choreRow === null) return changed;
+
+  if (settleChoreAfterCompletion_(choreRow, choreFromRow_(choreRow), completedAt)) changed = true;
+  return changed;
 }
 
 /**
@@ -330,14 +417,15 @@ function deliverReminder_(
 }
 
 /**
- * Closes one open instance: cancels its reminder, then removes the row.
+ * Closes one open instance: cancels its reminder, then removes the row. Returns whether
+ * there was anything to close, so a replayed completion can tell a repair from a no-op.
  *
  * Cancel first, delete second. The other order strands an event on somebody's calendar
  * whenever the run dies in between — an alert about a chore that no longer has a row to
  * tick off. This order can only leave a row pointing at an already-cancelled event,
  * which is invisible and self-corrects the next time anything touches it.
  */
-function closeInstance_(instanceId: string): void {
+function closeInstance_(instanceId: string): boolean {
   const rows = filterRows_(readRows_("Instances"), "instanceId", instanceId);
   const sender = notificationSender_();
   for (const row of rows) {
@@ -347,6 +435,7 @@ function closeInstance_(instanceId: string): void {
     "Instances",
     rows.map((row) => row.rowNumber),
   );
+  return rows.length > 0;
 }
 
 /** Closes every open instance of a chore. Used when the chore itself goes away. */

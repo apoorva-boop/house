@@ -48,13 +48,36 @@ async function expectNoStrandedEvents(): Promise<void> {
   const live = new Map(
     instances.map((row) => [String(row.instanceId), String(row.calendarEventId ?? "")]),
   );
-  for (const event of await listAllCalendar()) {
+  const events = await listAllCalendar();
+  const byEventId = new Map(events.map((event) => [event.eventId, event]));
+
+  for (const event of events) {
     expect(
       live.has(event.instanceId),
       `calendar event ${event.eventId} is tagged with instanceId ${event.instanceId}, which has no Instances row`,
     ).toBe(true);
     expect(live.get(event.instanceId)).toBe(event.eventId);
   }
+
+  // The other direction, and the reason this helper is worth calling. The loop above
+  // iterates the calendar, so on an empty calendar it asserts nothing at all and passes
+  // against a server that deletes every event and schedules none. Every Instances row
+  // that CLAIMS an event must have that event, at that id, tagged back to it.
+  const claimed = [...live.entries()].filter(([, eventId]) => eventId !== "");
+  for (const [instanceId, eventId] of claimed) {
+    const event = byEventId.get(eventId);
+    expect(
+      event,
+      `Instances row ${instanceId} claims calendar event ${eventId}, which is not on the calendar`,
+    ).toBeDefined();
+    expect(event?.instanceId).toBe(instanceId);
+  }
+
+  // And nothing beyond those: the two sides are a bijection, not an overlap.
+  expect(
+    events.map((event) => event.eventId).sort(),
+    "the calendar and the Instances rows must name exactly the same set of events",
+  ).toEqual(claimed.map(([, eventId]) => eventId).sort());
 }
 
 /** Seeds an overdue chore and sweeps it into an instance with a calendar event. */
@@ -180,6 +203,22 @@ describe("calendar channel", () => {
         const stale = eventsFor(events, instanceId).filter((e) => e.eventId === originalEventId);
         expect(stale).toHaveLength(0);
       }
+
+      // The branch above only says the OLD event is gone or moved, which a server that
+      // deleted the event and scheduled nothing would also satisfy. So assert the
+      // positive: the chore still has exactly one live reminder, and it sits at the new
+      // date. This holds whichever branch was taken.
+      const liveInstances = await instancesFor(chore.id);
+      const reminders = liveInstances.flatMap((row) => eventsFor(events, String(row.instanceId)));
+      expect(reminders).toHaveLength(1);
+
+      const startAt = reminders[0].startAt;
+      expect(startAt, "the surviving reminder must carry a start time").toBeTruthy();
+      // The channel writes the event start from the row's dueAt; Google stores it to the
+      // second, so allow the same one-minute slack the sweep's own drift check allows.
+      // The old date is 22 days away from the new one, so this cannot pass by accident.
+      expect(Math.abs(Date.parse(String(startAt)) - Date.parse(newDueAt))).toBeLessThan(60_000);
+      expect(startAt).not.toBe(event.startAt);
 
       await expectNoStrandedEvents();
     },

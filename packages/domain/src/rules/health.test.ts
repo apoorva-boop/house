@@ -56,6 +56,43 @@ describe("health", () => {
     expect(health(ctx, garden, gardenOverdue)).toBeLessThan(100);
     expect(health(ctx, house, [])).toBe(100);
   });
+
+  it("scores each asset off ONE mixed list, ignoring the other asset's overdue chores", () => {
+    // The filter inside healthReport is the only thing keeping these two numbers apart.
+    // One list, handed whole to both calls, is what exercises it: a per-asset list would
+    // give the same answers with the filter deleted.
+    const gardenEntry = overdue("garden", { time: 1, effort: 1, priority: 1 }, 90); // weight 7
+    const houseEntry = overdue("house", { time: 5, effort: 5, priority: 5 }, 90); // weight 35
+    const mixed = [gardenEntry, houseEntry];
+
+    // Both are 90 days late against a 30-day interval, so severity saturates at 1 and
+    // burden is just the weight. Garden budget 25: 100 - 100*7/25 = 72.
+    // House budget 60: 100 - 100*35/60 = 41.67 -> 42.
+    expect(health(ctx, garden, mixed)).toBe(72);
+    expect(health(ctx, house, mixed)).toBe(42);
+
+    // And the mixed list must give the same answer as the sliced one, both ways round.
+    expect(health(ctx, garden, mixed)).toBe(health(ctx, garden, [gardenEntry]));
+    expect(health(ctx, house, mixed)).toBe(health(ctx, house, [houseEntry]));
+  });
+
+  it("clamps capDays up to the 14-day floor for a chore due more often than that", () => {
+    // Daily chore, 7 days late. Raw interval 1 would saturate severity at 1 and cost the
+    // full 35 points; the 14-day floor makes it severity 0.5 and half the damage.
+    // 100 - 100*(35*0.5)/60 = 70.83 -> 71. Unclamped it would be 42.
+    const daily = overdue("house", { time: 5, effort: 5, priority: 5 }, 7, 1);
+    expect(health(ctx, house, [daily])).toBe(71);
+    expect(health(ctx, house, [daily])).not.toBe(42);
+  });
+
+  it("clamps capDays down to the 90-day ceiling for a chore due less often than that", () => {
+    // Annual chore, 180 days late. Raw interval 365 would leave severity at 0.49 and only
+    // 17.3 points of damage; the 90-day ceiling saturates it at 1 for the full 35.
+    // 100 - 100*35/60 = 41.67 -> 42. Unclamped it would be 71.
+    const annual = overdue("house", { time: 5, effort: 5, priority: 5 }, 180, 365);
+    expect(health(ctx, house, [annual])).toBe(42);
+    expect(health(ctx, house, [annual])).not.toBe(71);
+  });
 });
 
 describe("healthBand", () => {

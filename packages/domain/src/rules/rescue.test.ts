@@ -6,14 +6,15 @@ import type { DomainCtx } from "../ctx.js";
 
 const ctx: DomainCtx = { now: Date.parse("2026-09-01T09:00:00+12:00"), timeZone: "Pacific/Auckland" };
 
-function pair(id: string, priority: number, effort: number) {
+function pair(id: string, priority: number, effort: number, daysOverdue = 40) {
   const chore: Chore = {
     id, title: id, assetId: "house", weight: { time: 2, effort, priority },
     recurrence: { kind: "interval", unit: "day", n: 30 },
     deadlineDate: null, leadTimeDays: null, urgencyCurve: null,
   };
   const instance: ChoreInstance = {
-    instanceId: `i-${id}`, choreId: id, dueAt: ctx.now - 40 * 86_400_000, overdueDays: 40,
+    instanceId: `i-${id}`, choreId: id, dueAt: ctx.now - daysOverdue * 86_400_000,
+    overdueDays: daysOverdue,
     calendarEventId: null, lastNotifiedAt: null, snoozedUntil: null,
   };
   return { instance, chore };
@@ -39,5 +40,31 @@ describe("rescue", () => {
     const r = rescue(ctx, []);
     expect(r.overdueCount).toBe(0);
     expect(r.recommended).toBeNull();
+  });
+
+  it("ignores a chore that is not yet due in the count, the bonus and the recommendation", () => {
+    // A chore due in five days is not backlog. Every other rescue fixture is 40 days
+    // late, so without this case the skip at the top of the loop is never taken.
+    const late = pair("gutters", 5, 4);
+    const future = pair("wof", 5, 1, -5);
+
+    const withFuture = rescue(ctx, [late, future]);
+    const lateOnly = rescue(ctx, [late]);
+
+    expect(withFuture.overdueCount).toBe(1);
+    expect(withFuture.recommended?.id).toBe("gutters");
+    expect(withFuture.bonusPoints).toBe(lateOnly.bonusPoints);
+    expect(withFuture.skipped).toEqual([]);
+
+    // The future chore is the higher burden-per-effort of the two, so if it were let
+    // through as a zero-severity entry it would still swell the count and the bonus.
+    expect(withFuture).toEqual(lateOnly);
+  });
+
+  it("counts nothing when every chore is still in the future", () => {
+    const r = rescue(ctx, [pair("gutters", 5, 4, -1), pair("wof", 5, 1, -30)]);
+    expect(r.overdueCount).toBe(0);
+    expect(r.recommended).toBeNull();
+    expect(r.bonusPoints).toBe(0);
   });
 });

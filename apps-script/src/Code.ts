@@ -170,28 +170,28 @@ function doPost(e: WebAppEvent): GoogleAppsScript.Content.TextOutput {
 }
 
 /**
- * The same router over query parameters, so a browser can fetch a snapshot without a
- * body. `payload` is a JSON string when a caller needs one.
+ * `snapshot`, and nothing else, so a browser can read the household without a body.
+ *
+ * ONE op, deliberately. This used to route the whole `dispatch_` table off query
+ * parameters, which put `complete`, `chore.delete` and `test.clear` — the op that wipes
+ * every tab — on a URL, next to the token that authorises them. A token in a URL is a
+ * token in the browser's history, in the `Referer` header of anything that page links to,
+ * and in Google's own execution log; a mutation in a URL is a mutation a link, a prefetch
+ * or a crawler can fire. Every mutating op is a POST, where the token travels in the body.
+ *
+ * `payload` and `mutationId` are gone with it: `snapshot` takes neither.
  */
 function doGet(e: WebAppEvent): GoogleAppsScript.Content.TextOutput {
   try {
     const parameter = e && e.parameter ? e.parameter : {};
-    let payload: unknown = {};
-    const raw = asText_(parameter["payload"]);
-    if (raw !== "") {
-      try {
-        payload = JSON.parse(raw);
-      } catch {
-        return errorEnvelope_("`payload` is not valid JSON.");
-      }
-    }
     const op = asText_(parameter["op"]);
-    return handleRequest_({
-      token: asText_(parameter["token"]),
-      op: op === "" ? "snapshot" : op,
-      payload,
-      mutationId: asText_(parameter["mutationId"]),
-    });
+    if (op !== "" && op !== "snapshot") {
+      return errorEnvelope_(
+        `GET serves "snapshot" only, and this asked for "${op}". Send it as a POST: ` +
+          "every other op mutates, and a URL is the one place a token must never travel.",
+      );
+    }
+    return handleRequest_({ token: asText_(parameter["token"]), op: "snapshot" });
   } catch (error) {
     return errorEnvelope_(messageOf_(error));
   }

@@ -154,7 +154,7 @@ function headersFor_(tab: string): string[] {
 //   TEST_MODE     must be exactly "true" before any `test.*` op will run at all
 //
 // TEST_MODE is the important one. `test.clear` wipes every data tab and deletes every
-// event on the calendar. Shipping that op behind a token alone would leave a data-wiping
+// event this server put on the calendar. Shipping that op behind a token alone would leave a data-wiping
 // endpoint live on a public URL forever. The ops are compiled into every deployment, but
 // they are inert unless the deployment's owner has deliberately set TEST_MODE. The test
 // project sets it; the production project never will.

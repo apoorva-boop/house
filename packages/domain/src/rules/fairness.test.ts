@@ -50,4 +50,23 @@ describe("fairness", () => {
     expect(fairness(ctx, [done("friend", 25, 31)], PEOPLE).windowPoints).toBe(0);
     expect(fairness(ctx, [done("friend", 25, 29)], PEOPLE).windowPoints).toBe(25);
   });
+
+  it("ignores a completion by somebody outside the household, windowPoints included", () => {
+    // Decided behaviour: points earned by a person who is not on screen are dropped
+    // entirely rather than counted into the denominator. Counting them would deflate
+    // both real shares against points nobody can be credited with.
+    const household = [done("friend", 20, 2), done("apoorva", 20, 3)];
+    const withGuest = [...household, done("houseguest", 60, 4)];
+
+    const r = fairness(ctx, withGuest, PEOPLE);
+    expect(r.windowPoints).toBe(40);
+    expect(r.byPerson["friend"]?.points).toBe(20);
+    expect(r.byPerson["apoorva"]?.points).toBe(20);
+    expect(r.byPerson["friend"]?.share).toBeCloseTo(0.5, 5);
+    expect(r.byPerson["apoorva"]?.share).toBeCloseTo(0.5, 5);
+    expect(r.byPerson["houseguest"]).toBeUndefined();
+
+    // The guest changes nothing at all: same result as if they had never completed it.
+    expect(r).toEqual(fairness(ctx, household, PEOPLE));
+  });
 });

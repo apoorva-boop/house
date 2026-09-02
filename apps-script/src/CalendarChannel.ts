@@ -79,14 +79,21 @@ function calendarSender_(): NotificationSender {
     },
 
     cancel(reference: string): void {
-      if (reference === "") return;
-      const event = calendarEventById_(reference);
+      // `liveCalendarEvent_`, never `calendarEventById_` on its own. Google hands back a
+      // deleted event as a live object, and calling `deleteEvent()` on that tombstone
+      // throws — out of `cancel`, out of `closeInstance_`, and out of the completion that
+      // called it, which is how a hand-deleted reminder used to break ticking the chore off.
+      const event = liveCalendarEvent_(reference);
       if (event !== null) event.deleteEvent();
     },
 
     reschedule(reference: string, request: NotificationRequest): boolean {
-      if (reference === "") return false;
-      const event = calendarEventById_(reference);
+      // Same tombstone, different damage. `getEventById` returns an object for an event
+      // the household deleted, `setTime` on it "succeeds", and returning true here would
+      // tell `rescheduleInstancesOfChore_` the reminder had moved — so the row would be
+      // stamped `scheduled` with a dead id and the user's edit would produce no event at
+      // all. False means gone, and the caller sends a fresh one.
+      const event = liveCalendarEvent_(reference);
       if (event === null) return false;
       event.setTime(new Date(request.dueAt), new Date(request.dueAt + eventDurationMs_()));
       event.setTitle(request.title);
@@ -197,6 +204,23 @@ function calendarStartsByEventId_(nowMs: number): Record<string, number> {
     if (Number.isFinite(ms)) starts[event.getId()] = ms;
   }
   return starts;
+}
+
+/**
+ * The event behind a reference, or `null` when the calendar no longer LISTS it.
+ *
+ * The one liveness test in this file, and it is the sweep's: presence in
+ * `calendarStartsByEventId_`. `getEventById` cannot answer this question — see that
+ * function's docstring for the probe — so nothing outside this helper is allowed to
+ * decide from it alone that an event is alive. The `getEventById` call below only turns
+ * an id the listing has already vouched for into the object the caller has to write to.
+ */
+function liveCalendarEvent_(
+  reference: string,
+): GoogleAppsScript.Calendar.CalendarEvent | null {
+  if (reference === "") return null;
+  if (calendarStartsByEventId_(Date.now())[reference] === undefined) return null;
+  return calendarEventById_(reference);
 }
 
 /**
