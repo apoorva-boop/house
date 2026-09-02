@@ -52,8 +52,7 @@ interface DomainCtx {
 
 // `Domain` is provided at runtime by a different file in the same global scope
 // (apps-script/build/domain.js). A per-file linter cannot see that assignment, and an
-// ambient declaration emits nothing, so there is no reference for it to find here.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// ambient declaration emits nothing, so there is nothing here for it to bind to.
 declare const Domain: {
   weight(w: { time: number; effort: number; priority: number }): number;
   nextDueFrom(ctx: DomainCtx, lastDone: number, chore: DomainChore): number;
@@ -73,19 +72,96 @@ declare const Domain: {
   defaultChores(): DomainChore[];
   /** Points per week each asset is worth, keyed by asset kind. */
   readonly DEFAULT_BUDGETS: Record<string, number>;
+  /**
+   * SHA-256 of the `packages/domain` sources this bundle was built from, appended by
+   * `scripts/build-domain.mjs`. Read only by `assertDomainBundleFresh_` below.
+   */
+  readonly SOURCE_HASH: string;
 };
+
+// ---------------------------------------------------------------------------
+// Is the deployed bundle the one this server was built against?
+// ---------------------------------------------------------------------------
+// The ambient declaration above emits nothing. `tsc` therefore type-checks this server
+// against a signature the deployed `domain.js` may not actually have, and it will not
+// notice if it does not — which is not a hypothetical. `weight` was implemented in
+// `packages/domain`, `apps-script/build/domain.js` still held the stub, the push went
+// out, and every chore scored the clamp floor. Four failing tests were the only signal.
+//
+// `pnpm build` stamps the same domain-source fingerprint into two files:
+//
+//   build/domain.js        as `Domain.SOURCE_HASH`
+//   build/BundleStamp.js   as `expectedDomainHash_()`
+//
+// They agree only when both halves were built from the same tree. A half-rebuilt
+// `apps-script/build/` — which is exactly what a hand-run `npx clasp push` uploads,
+// since it never builds anything — makes them disagree, and this turns that into an
+// `{ok:false}` on the very first request instead of a wrong number nobody queries.
+//
+// The wholly-stale case (nothing rebuilt, both halves old but consistent) cannot be
+// seen from here: a deployed script has no access to the source files. That one is
+// `pnpm check:bundle`, which reads the working tree. This is the half that survives
+// somebody skipping the build entirely.
+//
+// `expectedDomainHash_` is a top-level function declaration in a generated file, so it
+// is hoisted and load order does not matter. It has no `.ts` source, hence the ambient
+// declaration.
+declare function expectedDomainHash_(): string;
+
+/**
+ * Throws unless `domain.js` and `BundleStamp.js` came from the same build.
+ *
+ * Called from `handleRequest_` before authentication, so nothing runs against a bundle
+ * whose behaviour the rest of this server has not been type-checked against. `doPost`
+ * and `doGet` both catch, so this surfaces as a normal error envelope, not as Google's
+ * HTML error page.
+ */
+function assertDomainBundleFresh_(): void {
+  if (typeof Domain === "undefined" || typeof Domain.SOURCE_HASH !== "string") {
+    throw new Error(
+      "domain.js is missing or predates the freshness stamp. The deployment is " +
+        "incomplete: run `pnpm clasp:push`.",
+    );
+  }
+  if (typeof expectedDomainHash_ !== "function") {
+    throw new Error(
+      "BundleStamp.js was not deployed. The deployment is incomplete: run `pnpm clasp:push`.",
+    );
+  }
+  const expected = expectedDomainHash_();
+  if (Domain.SOURCE_HASH !== expected) {
+    throw new Error(
+      "Stale deployment. The server files were built from domain sources " +
+        `${expected.slice(0, 12)}, but domain.js holds ${Domain.SOURCE_HASH.slice(0, 12)}. ` +
+        "Something pushed a half-built apps-script/build/. Run `pnpm clasp:push`.",
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Sheet schema
 // ---------------------------------------------------------------------------
 
 /**
- * Column headers per tab, in order. This mirrors `SCHEMA` in
- * `apps-script/src/testkit.ts` — the two must not drift, because the test suite reads
- * and writes rows keyed by these exact names.
+ * Column headers per tab, in order. THIS is the schema: `sheetFor_` writes this header
+ * row, so a tab has these columns and no others.
  *
- * `Subscriptions` and `ResetProposals` are listed so `test.clear` knows to wipe them and
- * so the tabs exist from the first run. Nothing in this pull request writes to them.
+ * `SCHEMA` in `apps-script/src/testkit.ts` is a SUBSET of it, not a copy, and the two
+ * are already different on purpose:
+ *
+ *   - `Instances` here ends with `scheduleState`; testkit's does not. The integration
+ *     suite reads and writes rows by header NAME, so a column it never names costs it
+ *     nothing.
+ *   - `Subscriptions` and `ResetProposals` are listed here and absent there. They exist
+ *     so the tabs are created on the first run and so `test.clear` knows to wipe them.
+ *     Nothing in this pull request writes to either.
+ *
+ * The direction that matters is one-way: every column testkit names must appear here,
+ * because the server is what creates the tab. Columns here that testkit does not name
+ * are fine. Nothing enforces even that — testkit is frozen, and a check that fails on
+ * the differences listed above would fail from the moment it was written, so the honest
+ * statement is this comment rather than a red build. If you REMOVE or RENAME a column
+ * below, grep `SCHEMA` in testkit.ts before you do.
  */
 function sheetSchema_(): Record<string, string[]> {
   return {

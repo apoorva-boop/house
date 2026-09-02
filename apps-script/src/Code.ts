@@ -147,6 +147,12 @@ function dispatch_(
 
 function handleRequest_(envelope: RequestEnvelope): GoogleAppsScript.Content.TextOutput {
   try {
+    // Before anything else, including auth. `Config.ts` type-checks this server against
+    // an ambient `Domain` that emits nothing, so a bundle that does not match is a
+    // silent wrong answer rather than a crash — see `assertDomainBundleFresh_`. Refusing
+    // the request is the loud version. The catch below turns it into an error envelope.
+    assertDomainBundleFresh_();
+
     const op = asText_(envelope.op);
     const token = asText_(envelope.token);
     const outcome = authenticate_(token, op);

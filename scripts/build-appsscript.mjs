@@ -6,6 +6,8 @@
 //   apps-script/build/appsscript.json   copied verbatim from apps-script/
 //   apps-script/build/Code.js           transpiled from apps-script/src/Code.ts
 //   apps-script/build/domain.js         written by `pnpm build:domain`
+//   apps-script/build/BundleStamp.js    the domain-source fingerprint, so a stale
+//                                       bundle is loud instead of silent
 //
 // Transpile, do NOT bundle. Apps Script's V8 runtime has no module system: a `.gs`
 // file's top-level `function` declarations are its globals, and that is how the
@@ -44,6 +46,7 @@ import { transform } from "esbuild";
 import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STAMP_PREFIX, domainSourceHash } from "./domain-hash.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = resolve(repoRoot, "apps-script/src");
@@ -52,6 +55,11 @@ const outDir = resolve(repoRoot, "apps-script/build");
 const BANNER =
   "// GENERATED FILE - DO NOT EDIT.\n" +
   "// Built from apps-script/src by `pnpm build:appsscript`. Edit the source there.\n";
+
+// The fingerprint of `packages/domain/src` as it stands right now. Stamped into
+// `build/BundleStamp.js` below, and compared at runtime against the copy `build:domain`
+// stamped into `build/domain.js`.
+const serverStampHash = await domainSourceHash();
 
 await mkdir(outDir, { recursive: true });
 
@@ -102,3 +110,34 @@ for (const file of SERVER_FILES) {
 }
 
 console.log(`built ${resolve(outDir, "appsscript.json")}`);
+
+// 3. The freshness stamp.
+//
+//    `pnpm build` runs `build:domain` and then this script, so the hash written here is
+//    the hash of the same working tree the bundle was built from. The two only disagree
+//    when the halves were built at different times — which is precisely what a
+//    half-rebuilt `apps-script/build/` is, and precisely what a hand-run `npx clasp
+//    push` uploads without complaint.
+//
+//    `assertDomainBundleFresh_` in `Config.ts` compares this against
+//    `Domain.SOURCE_HASH` from `domain.js` on every request, so a mismatched pair is a
+//    loud `{ok:false}` on the first call rather than a wrong number three weeks later.
+//    That is the `weight` failure: `Config.js` was rebuilt and called `Domain.weight`,
+//    `domain.js` still held the stub, and the only thing that noticed was four failing
+//    tests.
+//
+//    Written straight to build/ rather than being a `.ts` in src/, because a generated
+//    file in src/ is a file somebody eventually hand-edits. It is a top-level function
+//    declaration like every other file here, so load order does not matter.
+const stampFile = resolve(outDir, "BundleStamp.js");
+await writeFile(
+  stampFile,
+  BANNER +
+    "// Written by `pnpm build:appsscript`. See the comment at the foot of that script.\n" +
+    `${STAMP_PREFIX}${serverStampHash}\n` +
+    "function expectedDomainHash_() {\n" +
+    `  return ${JSON.stringify(serverStampHash)};\n` +
+    "}\n",
+  "utf8",
+);
+console.log(`built ${stampFile} (domain sources ${serverStampHash.slice(0, 12)})`);

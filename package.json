@@ -16,8 +16,10 @@
     "build:domain": "node scripts/build-domain.mjs",
     "build:appsscript": "node scripts/build-appsscript.mjs",
     "build": "pnpm build:domain && pnpm build:appsscript",
+    "//check:bundle": "Fails if apps-script/build/ predates the current packages/domain/src. `npx clasp push` bypasses the build and uploads whatever is in build/; this is what catches that. See the header of scripts/check-bundle.mjs.",
+    "check:bundle": "node scripts/check-bundle.mjs",
     "clasp:config": "node scripts/write-clasp-config.mjs",
-    "clasp:push": "pnpm build && pnpm clasp:config && clasp push"
+    "clasp:push": "pnpm build && pnpm check:bundle && pnpm clasp:config && clasp push"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

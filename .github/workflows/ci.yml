@@ -51,20 +51,46 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # A GATE. A build failure fails the job.
+      #
+      # `apps-script/build/` is gitignored, so this is the only place CI ever sees the
+      # bundle. Without it, `scripts/build-domain.mjs` and `scripts/build-appsscript.mjs`
+      # were unexercised code: a change that broke either of them would land green and be
+      # discovered by hand at the next deploy.
+      #
+      # It matters more than an ordinary build step because `apps-script/src/Config.ts`
+      # declares `Domain` AMBIENTLY. An ambient declaration emits nothing, so `pnpm
+      # typecheck` above checks the server against a signature the deployed `domain.js`
+      # is not obliged to have. Building is what turns that signature into a real file.
+      - name: Build the Apps Script bundle
+        run: pnpm build
+
+      # Also a gate, and cheap. Here it proves the freshness stamping still works: the
+      # step above has just built both halves from the same tree, so their fingerprints
+      # must agree. If this fails right after a build, the stamping machinery is broken,
+      # which would leave a stale deploy undetectable again.
+      #
+      # Its real job is local, not here. See the header of scripts/check-bundle.mjs.
+      - name: Bundle freshness stamp
+        run: pnpm check:bundle
+
       # ---------------------------------------------------------------------------
       # NOT A GATE YET - AND THAT IS TEMPORARY.
       #
-      # The unit suite is written ahead of the implementation: PR 1 lands the tests,
-      # PR 2 lands the domain rules that make them pass. Today the suite is EXPECTED to
-      # fail (roughly 18 passing / 45 failing) because the code under test does not
-      # exist yet. Gating on it now would block every PR before PR 2.
+      # The unit suite is written ahead of the implementation, so some of it is EXPECTED
+      # to fail. Gating on it now would block every PR until the last of that code lands.
+      #
+      # EXPECTED TO FAIL, exhaustively: `apps/web/src/map/Camera.test.ts`. That is the
+      # whole list. A failure in any other file is a real regression, whatever this step
+      # reports. Deliberately named as files rather than as a pass/fail count - a count
+      # is stale the moment anyone adds a test, and a stale count is worse than none.
       #
       # `continue-on-error: true` means this step reports its real result - a failing
       # run shows as a failed step with its full output - but does not fail the job.
       # Nothing here rewrites, filters or hides the vitest output.
       #
-      # WHEN PR 2 LANDS: delete the `continue-on-error` line below. From that point a
-      # failing unit test must fail CI.
+      # WHEN THE LAST FILE ABOVE GOES GREEN: delete both this comment and the
+      # `continue-on-error` line. From that point a failing unit test must fail CI.
       # ---------------------------------------------------------------------------
       - name: Unit tests (reported, not yet enforced - see comment above)
         run: pnpm test

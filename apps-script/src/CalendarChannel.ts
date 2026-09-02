@@ -5,10 +5,23 @@
 // ---------------------------------------------------------------------------
 // Calendar is the STOP-LOSS for the whole project. Declarative Web Push on iOS is the
 // thing most likely not to work, and if it does not, this is the channel that ships.
-// Push arrives later as a SECOND implementation of `NotificationSender` — `DueSweep`
-// asks the sender to deliver and to cancel, and never mentions Calendar by name. That
-// is the entire point of the seam: the push relay is a new file and a registration, not
-// a rewrite of the sweep.
+// Push arrives later as a SECOND implementation of `NotificationSender`: the relay is a
+// new file and a registration, not a rewrite of the sweep.
+//
+// BE PRECISE ABOUT WHAT THE SEAM COVERS. It covers SENDING a reminder, and nothing else.
+// It does NOT make Calendar swappable, and this file must not be read as saying so.
+//
+// Since the v3 decision, Google Calendar is AUTHORITATIVE for when a chore is next due:
+// drag an event and the due date moves, delete an event and the chore is unscheduled.
+// `DueSweep` therefore talks to Calendar directly and by name — `calendarStartsByEventId_`
+// and `calendarDriftToleranceMs_` are neither of them on `NotificationSender`, and the
+// `Instances` schema has a literal `calendarEventId` column. Calendar can be ADDED to.
+// It cannot be removed.
+//
+// So the reason dropping the push work stays safe is NOT "swap the implementation".
+// It is that Calendar is already the load-bearing channel and push was only ever a
+// second one alongside it. Nothing has to be swapped out, because nothing was ever
+// standing in for Calendar.
 //
 // ---------------------------------------------------------------------------
 // Why every event carries a tag

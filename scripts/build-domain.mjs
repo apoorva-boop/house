@@ -14,10 +14,12 @@ import { build } from "esbuild";
 import { mkdir, appendFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STAMP_PREFIX, domainSourceHash } from "./domain-hash.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const entry = resolve(repoRoot, "packages/domain/src/index.ts");
 const outfile = resolve(repoRoot, "apps-script/build/domain.js");
+const sourceHash = await domainSourceHash();
 
 await mkdir(dirname(outfile), { recursive: true });
 
@@ -42,6 +44,24 @@ await build({
 // `globalName` emits `var Domain = (() => { ... })()`. At the top level of an Apps
 // Script file that is already a global, but bind it explicitly so the reference works
 // the same way whichever file loads first.
-await appendFile(outfile, "\nglobalThis.Domain = Domain;\n");
+//
+// `SOURCE_HASH` is stamped on the same object. It is the fingerprint of the domain
+// sources this bundle was actually built from, and it is what makes a stale bundle
+// detectable rather than silent — see `scripts/domain-hash.mjs` for why it is a hash
+// and not an mtime or a hand-bumped version. Two things read it back:
+//
+//   `scripts/check-bundle.mjs`   compares it to the CURRENT working tree, so a build
+//                                that predates an edit to `packages/domain` fails
+//                                before anything is pushed.
+//   `assertDomainBundleFresh_`   in `apps-script/src/Config.ts`, compares it to the
+//                                stamp the server half of the build carries. That one
+//                                survives a hand-run `npx clasp push`, which is exactly
+//                                how a half-built directory reaches production.
+await appendFile(
+  outfile,
+  "\nglobalThis.Domain = Domain;\n" +
+    `Domain.SOURCE_HASH = ${JSON.stringify(sourceHash)};\n` +
+    `${STAMP_PREFIX}${sourceHash}\n`,
+);
 
-console.log(`built ${outfile}`);
+console.log(`built ${outfile} (domain sources ${sourceHash.slice(0, 12)})`);
