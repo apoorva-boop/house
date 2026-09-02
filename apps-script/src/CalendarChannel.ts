@@ -173,20 +173,30 @@ function reconcileCalendar_(nowMs: number): { removed: string[] } {
 // the whole read side.
 
 /**
- * When the calendar says this event starts, or `null` when the event is gone.
+ * Every event this server owns that the calendar still HOLDS, as event id -> start time.
  *
- * `null` is a normal answer, not an error: somebody deleting a reminder they do not want
- * is the household telling the app this chore is not currently scheduled, and that has
- * to be readable without a throw.
+ * Built from a LISTING, never from `getEventById` per row, and that is the whole point of
+ * the function. `getEventById` is not a liveness test. Google keeps a deleted event as a
+ * tombstone and hands it straight back — probed against this very calendar: create an
+ * event, delete it the way `calendar.reconcile` does, then ask `getEventById` for the id
+ * and you get an object, not `null`, and its `getStartTime()` is still the original
+ * start. A sweep that asked "did this come back null?" was therefore always told the
+ * event was fine, and a reminder the household deleted could never be noticed.
+ *
+ * `getEvents` does exclude the deleted event, so ABSENCE FROM THIS MAP is the definition
+ * of gone — the same definition the integration suite uses when it asserts the calendar
+ * no longer lists the event. It is also one calendar call per sweep instead of one per
+ * row, so the correct answer is the cheap one.
  */
-function eventStartMs_(eventId: string): number | null {
-  if (eventId === "") return null;
-  const event = calendarEventById_(eventId);
-  if (event === null) return null;
-  const start = event.getStartTime();
-  if (start === null || start === undefined) return null;
-  const ms = start.getTime();
-  return Number.isFinite(ms) ? ms : null;
+function calendarStartsByEventId_(nowMs: number): Record<string, number> {
+  const starts: Record<string, number> = {};
+  for (const event of taggedEvents_(nowMs)) {
+    const start = event.getStartTime();
+    if (start === null || start === undefined) continue;
+    const ms = start.getTime();
+    if (Number.isFinite(ms)) starts[event.getId()] = ms;
+  }
+  return starts;
 }
 
 /**

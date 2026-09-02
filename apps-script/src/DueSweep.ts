@@ -73,7 +73,7 @@ function runDueSweep_(nowMs: number): SweepResult {
   // Before anything else. The calendar may have been edited since the last run, and
   // every decision below — is this chore already open, is it due, should it alert —
   // reads a `dueAt` that only this pass can make true.
-  const readBack = reconcileInstancesFromCalendar_();
+  const readBack = reconcileInstancesFromCalendar_(nowMs);
 
   const chores = liveChoresById_();
   const openChoreIds: Record<string, true> = {};
@@ -137,8 +137,8 @@ function runDueSweep_(nowMs: number): SweepResult {
  *   moved    The event's start no longer matches `dueAt`. The event wins: `dueAt` is
  *            rewritten from it and `lastNotifiedAt` is cleared, because a chore moved to
  *            a new date deserves a fresh alert when that date arrives.
- *   gone     `getEventById` finds nothing. The row is marked `unscheduled` and its dead
- *            `calendarEventId` is dropped. The row itself STAYS: deleting it would let
+ *   gone     The calendar no longer LISTS the event. The row is marked `unscheduled` and
+ *            its dead `calendarEventId` is dropped. The row itself STAYS: deleting it would let
  *            the materialisation pass below re-create the occurrence and re-send the
  *            event within the same sweep, so deleting an event would do nothing at all.
  *            The chore row and every completion are untouched.
@@ -149,9 +149,17 @@ function runDueSweep_(nowMs: number): SweepResult {
  * is what gives them an event, and treating "not sent yet" as "deleted" would mean no
  * reminder was ever sent at all.
  */
-function reconcileInstancesFromCalendar_(): { rescheduled: string[]; unscheduled: string[] } {
+function reconcileInstancesFromCalendar_(nowMs: number): {
+  rescheduled: string[];
+  unscheduled: string[];
+} {
   const rescheduled: string[] = [];
   const unscheduled: string[] = [];
+
+  // One listing for the whole pass. "Gone" means the calendar does not list the event —
+  // see `calendarStartsByEventId_` for why asking `getEventById` instead reports every
+  // deleted event as alive.
+  const starts = calendarStartsByEventId_(nowMs);
 
   for (const row of readRows_("Instances")) {
     if (isUnscheduled_(row)) continue;
@@ -159,9 +167,9 @@ function reconcileInstancesFromCalendar_(): { rescheduled: string[]; unscheduled
     if (reference === "") continue;
 
     const instanceId = asText_(row.values["instanceId"]);
-    const startMs = eventStartMs_(reference);
+    const startMs = starts[reference];
 
-    if (startMs === null) {
+    if (startMs === undefined) {
       patchRow_("Instances", row, {
         calendarEventId: "",
         lastNotifiedAt: "",
@@ -371,7 +379,10 @@ function rescheduleInstancesOfChore_(choreRow: SheetRow, dueAtIso: string): void
       body: "Due then. Move this event to change the date, or tick it off in the house app.",
       dueAt: dueMs,
     };
-    const reference = asText_(row.values["calendarEventId"]);
+    // An unscheduled row's `calendarEventId` was cleared when its event went, and even a
+    // reference that survived would point at a tombstone `reschedule` would happily and
+    // invisibly "move". Such a row always needs a NEW event, never a moved one.
+    const reference = isUnscheduled_(row) ? "" : asText_(row.values["calendarEventId"]);
     if (reference !== "" && sender.reschedule(reference, request)) {
       patchRow_("Instances", row, { dueAt: dueAtIso, scheduleState: scheduleStateScheduled_() });
       continue;
