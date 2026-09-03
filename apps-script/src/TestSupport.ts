@@ -14,7 +14,7 @@
 // TEST_MODE script property is exactly "true", BEFORE it looks at any token. The ops are
 // compiled into every deployment and are dead code in all but the test project.
 //
-// That gate is not belt-and-braces. `test.clear` wipes every data tab and deletes every
+// That gate is not belt-and-braces. `test.clear` and `test.reset` wipe every data tab and delete every
 // event this server put on the calendar. Guarding it with a token alone would leave a data-wiping
 // endpoint live on a public URL for as long as the deployment exists, one leaked string
 // away from erasing a household's history. A property only a human can set, in a project
@@ -26,40 +26,133 @@ function metaConfigKeys_(): string[] {
 }
 
 /**
+ * How far either side of "now" a test wipe looks for events to delete. 120 days.
+ *
+ * NOT the sweep's window. `calendarWindow_` spans 400 days each way because a reminder
+ * this server writes can legitimately sit anywhere in that span, and a sweep that missed
+ * one would leave an orphan behind forever. A test wipe has a much smaller job: it only
+ * has to catch what the suite itself put there since the last wipe.
+ *
+ * The furthest-out event any fixture can produce is the seeded warrant of fitness —
+ * `seedDeadlineMs_` puts it at `leadTimeDays + 14` days, and the largest lead time in
+ * `defaultChores()` is 30, so 44 days. The furthest back is a fixture instance seeded at
+ * -14 days. 120 days each way is therefore between two and eight times the widest thing
+ * the suite can create, which is margin enough that a new fixture would have to be
+ * wildly out of character to escape it.
+ *
+ * If you add a fixture that schedules further out than this, widen this number — an
+ * event outside the wipe window survives into the next test and will be counted by
+ * `listAllCalendar()`, which still looks 365 days each way.
+ */
+function testClearCalendarWindowMs_(): number {
+  return 120 * 24 * 60 * 60 * 1000;
+}
+
+/**
  * Wipes every data tab, and every event on the calendar THIS SERVER CREATED.
  *
- * `calendarId` is preserved. It is the deployment's configuration, not a fixture: the
+ * `calendarId` is never removed. It is the deployment's configuration, not a fixture: the
  * suite never writes it, so clearing it would leave the server unable to find the
  * calendar for the rest of the run — and "find the calendar" is not a thing to get wrong
  * by default, because the wrong answer is somebody's real calendar. Nothing in the suite
  * reads `Meta`, so the surviving row is invisible to it.
+ *
+ * No lock and no version bump here, so `test.clear` and `test.reset` can run exactly
+ * these steps inside ONE lock rather than each keeping its own copy of them.
  */
+function clearEverything_(): { clearedTabs: string[]; deletedEvents: number } {
+  const config = metaConfigKeys_();
+
+  for (const tab of tabNames_()) {
+    // `Meta` is the one tab that is not wiped and rebuilt. It used to be: the config rows
+    // were read out, every tab was cleared, and the config rows were appended back. That
+    // leaves a window in which `calendarId` is not on the sheet at all, and the window is
+    // reachable — `testkit.ts` now RETRIES a request whose response was lost, so a run
+    // that died between the clear and the re-append would be followed by a second run
+    // that read an already-empty `Meta`, found no config to preserve, and destroyed the
+    // calendar id for good. Every later op then failed with "No calendar configured".
+    //
+    // Deleting only the rows that are NOT configuration has no such window, and is
+    // idempotent however many times it runs.
+    if (tab === "Meta") continue;
+    clearTab_(tab);
+  }
+
+  const doomed: number[] = [];
+  for (const row of readRows_("Meta")) {
+    if (config.indexOf(asText_(row.values["key"])) === -1) doomed.push(row.rowNumber);
+  }
+  deleteRows_("Meta", doomed);
+
+  let deletedEvents = 0;
+  if (calendarId_() !== "") {
+    // Only events this server created, found by the same tag `reconcileCalendar_` keys
+    // on. The unfiltered listing this replaced deleted everything in the window,
+    // including events a person had put there by hand — so a `CALENDAR_ID` pointed one
+    // character wrong, at somebody's real diary, would have emptied thirteen months of
+    // it on the next `clearAll()`. An untagged event is not ours to delete, ever.
+    // `taggedEventsBetween_` carries that filter; only the WIDTH is narrowed here.
+    const now = Date.now();
+    const span = testClearCalendarWindowMs_();
+    for (const event of taggedEventsBetween_(new Date(now - span), new Date(now + span))) {
+      event.deleteEvent();
+      deletedEvents += 1;
+    }
+  }
+
+  return { clearedTabs: tabNames_(), deletedEvents };
+}
+
 function opTestClear_(): unknown {
   return withScriptLock_(() => {
-    const config = metaConfigKeys_();
-    const preserved: Record<string, unknown>[] = [];
-    for (const row of readRows_("Meta")) {
-      if (config.indexOf(asText_(row.values["key"])) !== -1) preserved.push({ ...row.values });
-    }
-
-    for (const tab of tabNames_()) clearTab_(tab);
-    appendRows_("Meta", preserved);
-
-    let deletedEvents = 0;
-    if (calendarId_() !== "") {
-      // Only events this server created, found by the same tag `reconcileCalendar_` keys
-      // on. The unfiltered listing this replaced deleted everything in the window,
-      // including events a person had put there by hand — so a `CALENDAR_ID` pointed one
-      // character wrong, at somebody's real diary, would have emptied thirteen months of
-      // it on the next `clearAll()`. An untagged event is not ours to delete, ever.
-      for (const event of taggedEvents_(Date.now())) {
-        event.deleteEvent();
-        deletedEvents += 1;
-      }
-    }
-
+    const result = clearEverything_();
     bumpVersion_();
-    return { clearedTabs: tabNames_(), deletedEvents };
+    return result;
+  });
+}
+
+/**
+ * Wipe, then seed, in ONE request.
+ *
+ * Every integration file's `beforeEach` clears the sheet and then writes the same three
+ * fixture tabs — People, Assets and Meta. Done from the client that is four round trips,
+ * and a round trip to a deployed Apps Script web app costs about two and a half seconds
+ * before the op does any work at all: the POST to `/exec`, the 302, and the GET to
+ * `googleusercontent.com` that actually carries the body. Four calls per test across
+ * thirty tests is three hundred requests of pure transport, and undocumented web-app
+ * throttling makes the tail of that far worse than its average.
+ *
+ * The rows arrive from the client rather than being invented here on purpose: the tests
+ * hold the person tokens they mint and assert against them, so the ids must be the
+ * caller's. This op contributes the ordering and the single lock, not the data.
+ *
+ * One `bumpVersion_` for the whole thing, because it is one state change.
+ */
+function opTestReset_(payload: Record<string, unknown>): unknown {
+  const tabs = payload["tabs"];
+  if (tabs === null || typeof tabs !== "object" || Array.isArray(tabs)) {
+    throw new Error("test.reset requires a `tabs` object keyed by tab name.");
+  }
+  const byTab = tabs as Record<string, unknown>;
+  // Validated BEFORE the lock is taken and before anything is wiped, so a typo in a tab
+  // name refuses the request outright rather than leaving the sheet cleared and unseeded.
+  const names = Object.keys(byTab);
+  const seedRows: Record<string, Record<string, unknown>[]> = {};
+  for (const tab of names) {
+    headersFor_(tab); // throws on an unknown tab
+    seedRows[tab] = asRowArray_(byTab[tab]);
+  }
+
+  return withScriptLock_(() => {
+    const cleared = clearEverything_();
+    let seeded = 0;
+    for (const tab of names) {
+      const rows = seedRows[tab] ?? [];
+      appendRows_(tab, rows);
+      seeded += rows.length;
+    }
+    bumpVersion_();
+    return { clearedTabs: cleared.clearedTabs, deletedEvents: cleared.deletedEvents, seeded };
   });
 }
 

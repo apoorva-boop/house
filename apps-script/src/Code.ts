@@ -129,6 +129,8 @@ function dispatch_(
     // itself the authorisation.
     case "test.clear":
       return opTestClear_();
+    case "test.reset":
+      return opTestReset_(payload);
     case "test.read":
       return opTestRead_(payload);
     case "test.write":

@@ -188,18 +188,31 @@ function withScriptLock_<T>(body: () => T): T {
 /**
  * 25 s. Do NOT raise this back to 120 s.
  *
- * The number is pinned by the test budget, not by the execution limit. `testkit.ts` sets
- * `TEST_TIMEOUT_MS = 60_000`, and the six-way contention test asserts a clean
- * `ok:false` when a request cannot get the lock. At 120_000 a genuinely queued sixth
- * request would sit for 120 s — past vitest's 60 s budget — so the test would fail as a
- * TEST TIMEOUT instead of the refusal it was written to assert: a green implementation
- * reported red for the wrong reason.
+ * The number is pinned by the test budget, not by the execution limit. The six-way
+ * contention test in `concurrency.test.ts` asserts a clean `ok:false` when a request
+ * cannot get the lock, so a queued request must be able to give up AND answer inside
+ * that budget. At 120_000 it could not, and the test would fail as a TEST TIMEOUT
+ * instead of the refusal it was written to assert: a green implementation reported red
+ * for the wrong reason.
  *
- * 25_000 is comfortably inside the 60 s budget while still being far longer than any
- * real contention between two people tapping "done" at once, and still well inside the
- * six-minute execution limit, so a request fails with a message rather than being killed.
+ * `TEST_TIMEOUT_MS` has since moved from 60_000 to 180_000, so the arithmetic behind
+ * this number has changed and is worth restating. The budget is no longer spent only on
+ * the lock: `testkit.ts` now retries a THROTTLED request twice, which means one call can
+ * legitimately cost three round trips plus about 5.5 s of backoff before it returns. The
+ * rule is therefore:
  *
- * Raising this means raising TEST_TIMEOUT_MS first. Both numbers move together.
+ *     TRANSPORT_ATTEMPTS × (lockTimeoutMs_ + one round trip) + backoff  <  TEST_TIMEOUT_MS
+ *
+ * At 25_000 that is 3 × (25 s + ~3 s) + 5.5 s ≈ 90 s against a 180 s budget — half of
+ * it, which is the margin this number exists to preserve. The extra headroom in the test
+ * timeout was bought for slow requests and retries; spending it here instead would put
+ * the contention test straight back where it was.
+ *
+ * 25_000 is also far longer than any real contention between two people tapping "done"
+ * at once, and well inside the six-minute execution limit, so a request fails with a
+ * message rather than being killed.
+ *
+ * Raising this means raising TEST_TIMEOUT_MS first, and by more than this moves.
  */
 function lockTimeoutMs_(): number {
   return 25_000;

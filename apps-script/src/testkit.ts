@@ -30,6 +30,10 @@
 //
 // Envelope: {token, op, payload, mutationId} -> {ok, data, error, serverTime, version}
 //
+// `postEnvelope` retries TRANSPORT failures and nothing else — see its docstring. A
+// well-formed envelope is the server's answer and is handed back untouched, `ok: false`
+// very much included.
+//
 // ---------------------------------------------------------------------------
 // Ops these tests require
 // ---------------------------------------------------------------------------
@@ -48,6 +52,9 @@
 // APPS_SCRIPT_TEST_TOKEN), NOT against a People row — so the backdoor is separable
 // from person auth and can be switched off in a real deployment:
 //   test.clear            wipe every data tab and delete every event on the calendar
+//   test.reset            {tabs: {TabName: Row[]}} — wipe, then seed, in ONE request.
+//                         `clearAll()` + `seedHousehold()` is four round trips and every
+//                         one of the thirty tests pays for it in `beforeEach`; this is one.
 //   test.read             {tab} -> {rows: object[]} keyed by header name
 //   test.write            {tab, rows} -> append rows keyed by header name
 //   test.update           {tab, keyField, rows} -> overwrite rows matched on keyField
@@ -223,30 +230,130 @@ export interface RequestBody {
 }
 
 /**
+ * How many times ONE request is sent before the suite gives up. Three, so there are two
+ * retries, at roughly 1.5 s and 4 s.
+ *
+ * Apps Script does not publish a request limit for web apps, and it does not need to for
+ * this to bite: a suite that fires several hundred requests at one deployment in twenty
+ * minutes gets intermittently answered with Google's HTML "page not found" instead of the
+ * script's output. That is throttling, not a bug in this server, and the run before this
+ * one lost three tests to it — `test.write` and `test.read`, ops with no logic worth
+ * failing on.
+ */
+const TRANSPORT_ATTEMPTS = 3;
+
+/** Base backoff before attempt 2 and attempt 3. Jittered, so parallel calls disperse. */
+const TRANSPORT_BACKOFF_MS = [1_500, 4_000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** ±30 %, so six concurrent requests do not all come back at the same instant. */
+function jittered(ms: number): number {
+  return Math.round(ms * (0.7 + Math.random() * 0.6));
+}
+
+/**
+ * True for a body that IS one of this server's envelopes — a parsed object carrying a
+ * boolean `ok`.
+ *
+ * This predicate is the whole safety argument for the retry. `Code.ts` answers every
+ * request, success or failure, with HTTP 200 and exactly this shape; Google's throttling
+ * and error pages answer with HTML and no shape at all. So "did an envelope come back?"
+ * separates "the server replied" from "the request never got there", without the client
+ * ever having to look at `ok`.
+ */
+function isEnvelope(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  return typeof (value as { ok?: unknown }).ok === "boolean";
+}
+
+/**
+ * One POST, with no deferred-clear flush. The bottom of the transport.
+ *
+ * Retries ONLY a transport failure: `fetch` itself throwing, or a response whose body is
+ * not an envelope (Google's HTML 404/429/500/503 pages are all of this kind). Every
+ * retry is logged, so a flaky run shows up in the output instead of being hidden by it.
+ *
+ * It does NOT retry — and never rewrites, unwraps or swallows — a well-formed envelope.
+ * `{ok: false}` is the server having answered "no", which `auth.test.ts` asserts on
+ * directly and which `concurrency.test.ts` requires to mean "nothing was written". A
+ * retry there would turn a deliberate refusal into a duplicate write, and a real
+ * regression into an intermittent pass. The envelope check happens before the status is
+ * looked at at all, so nothing the server actually said can be discarded.
+ *
+ * The delivery guarantee this buys is AT LEAST ONCE, not exactly once. Nearly every
+ * transport failure seen here is Google's front end answering with an HTML page before
+ * the script runs at all, so the retry is the first execution — but a lost RESPONSE to a
+ * request that did run would be re-executed. The ops the suite retries are safe under
+ * that: `complete` carries the same `mutationId` on every attempt and dedupes on it,
+ * `test.reset` wipes before it seeds so a second run lands the same rows, and `test.read`
+ * and `test.calendar.list` write nothing. `test.write` is the one that would duplicate,
+ * and `clearEverything_` in `TestSupport.ts` was made idempotent for exactly this reason.
+ *
+ * What this does NOT cover: a `{ok:false}` produced by the transport rather than by the
+ * op. A POST whose redirect chain lands back on `/exec` is served by `doGet`, which
+ * answers `{ok:false, error:"No token."}` — a well-formed envelope that is not an answer
+ * to the request that was sent. It is left alone here, deliberately, because the rule
+ * that an envelope is never second-guessed is worth more than catching it.
+ */
+async function send<T>(body: RequestBody): Promise<Envelope<T>> {
+  const { execUrl } = requireIntegrationEnv();
+  const op = body.op ?? "<none>";
+  let problem = "no attempt was made";
+
+  for (let attempt = 1; attempt <= TRANSPORT_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(execUrl, {
+        method: "POST",
+        // text/plain keeps this a "simple" CORS request. Apps Script cannot answer a
+        // preflight, so application/json would fail from the browser.
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(body),
+        redirect: "follow",
+      });
+      const text = await response.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = undefined;
+      }
+      // The server answered. Hand it back exactly as it came, whatever it says.
+      if (isEnvelope(parsed)) return parsed as Envelope<T>;
+      problem =
+        `HTTP ${response.status} with a body that is not an envelope. ` +
+        `First 300 chars: ${text.slice(0, 300)}`;
+    } catch (error) {
+      problem = `fetch threw: ${error instanceof Error ? error.message : String(error)}`;
+    }
+
+    if (attempt === TRANSPORT_ATTEMPTS) break;
+    const delay = jittered(TRANSPORT_BACKOFF_MS[attempt - 1] ?? 4_000);
+    console.warn(
+      `[testkit] transport failure on op "${op}" (attempt ${attempt}/${TRANSPORT_ATTEMPTS}), ` +
+        `retrying in ${delay} ms — ${problem}`,
+    );
+    await sleep(delay);
+  }
+
+  throw new Error(
+    `Apps Script did not return JSON for op "${op}" after ${TRANSPORT_ATTEMPTS} attempts. ` +
+      `Last failure: ${problem}`,
+  );
+}
+
+/**
  * POST an arbitrary envelope as `text/plain` JSON. Used directly by the auth
  * tests, which need to send a bad token and a body with no token at all.
+ *
+ * Flushes a deferred `clearAll()` first, so no request can ever reach the server ahead
+ * of a wipe the caller has already asked for. See `clearAll`.
  */
 export async function postEnvelope<T = unknown>(body: RequestBody): Promise<Envelope<T>> {
-  const { execUrl } = requireIntegrationEnv();
-  const response = await fetch(execUrl, {
-    method: "POST",
-    // text/plain keeps this a "simple" CORS request. Apps Script cannot answer a
-    // preflight, so application/json would fail from the browser.
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(body),
-    redirect: "follow",
-  });
-  const text = await response.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error(
-      `Apps Script did not return JSON (HTTP ${response.status}) for op "${body.op ?? "<none>"}". ` +
-        `First 300 chars: ${text.slice(0, 300)}`,
-    );
-  }
-  return parsed as Envelope<T>;
+  await flushDeferredClear();
+  return send<T>(body);
 }
 
 /** Convenience wrapper for a call that is expected to succeed. */
@@ -291,9 +398,74 @@ export async function updateRows(tab: TabName, keyField: string, rows: Row[]): P
   unwrap(await call("test.update", { tab, keyField, rows }), `test.update ${tab}`);
 }
 
-/** Wipes every data tab and deletes every event on the test calendar. */
-export async function clearAll(): Promise<void> {
-  unwrap(await call("test.clear", {}), "test.clear");
+// ---------------------------------------------------------------------------
+// clearAll / seedHousehold, and the one round trip they collapse into
+// ---------------------------------------------------------------------------
+// Every integration file opens with the same two lines:
+//
+//     await clearAll();
+//     household = await seedHousehold();
+//
+// which used to be four requests — a wipe, then a People write, an Assets write and a
+// Meta write — in the `beforeEach` of all thirty tests. A round trip to a deployed
+// Apps Script web app costs about two and a half seconds before the op does any work:
+// the POST to `/exec`, the 302, and the GET to googleusercontent.com that carries the
+// body. That is a hundred and twenty requests and roughly five minutes of the run spent
+// on transport, and it is also what pushes the deployment into Google's unpublished
+// web-app throttling, which is where the HTML-404 failures come from.
+//
+// So `clearAll()` does not send anything. It RECORDS that a wipe is owed, and
+// `seedHousehold()` — the call that always follows it — discharges that debt and the
+// seed together in a single `test.reset`. Four requests become one.
+//
+// The deferral is safe because every other route to the server flushes it first:
+// `postEnvelope` awaits `flushDeferredClear()` before it sends anything, and every
+// helper in this file goes through `postEnvelope`. A test that clears and then reads
+// still sees an empty sheet.
+//
+// The one visible consequence: a `clearAll()` with nothing after it — the `afterAll` in
+// each file — never reaches the server, so the last file's fixtures are left sitting in
+// the disposable sheet until the next run's first `beforeEach` wipes them. Nothing reads
+// the sheet between those two moments, and every entry point clears before it asserts.
+
+/** True when `clearAll()` has been called and no request has flushed it yet. */
+let deferredClear = false;
+
+/** The in-flight flush, so concurrent callers await one wipe rather than racing it. */
+let pendingClear: Promise<void> | null = null;
+
+/**
+ * Sends the owed wipe, if there is one.
+ *
+ * Goes through `send` rather than `call`, deliberately: `call` routes through
+ * `postEnvelope`, which flushes, which would call this again.
+ */
+async function flushDeferredClear(): Promise<void> {
+  if (!deferredClear) {
+    if (pendingClear !== null) await pendingClear;
+    return;
+  }
+  deferredClear = false;
+  const { testToken } = requireIntegrationEnv();
+  pendingClear = send({ token: testToken, op: "test.clear", payload: {}, mutationId: newId() })
+    .then((envelope) => {
+      unwrap(envelope, "test.clear");
+    })
+    .finally(() => {
+      pendingClear = null;
+    });
+  await pendingClear;
+}
+
+/**
+ * Wipes every data tab and deletes every event on the test calendar.
+ *
+ * DEFERRED — see the block comment above. The wipe is sent by whichever request comes
+ * next, or folded into `test.reset` when the next thing is `seedHousehold()`.
+ */
+export function clearAll(): Promise<void> {
+  deferredClear = true;
+  return Promise.resolve();
 }
 
 export async function listCalendar(timeMin: string, timeMax: string): Promise<CalendarEvent[]> {
@@ -355,21 +527,43 @@ export interface Household {
 /**
  * Seeds People, Assets and Meta by raw row write, not through production ops, so
  * a broken `chore.create` cannot make an unrelated test fail for the wrong reason.
+ *
+ * The ids are minted HERE, on the client, and sent to the server — never invented by
+ * the server and read back. The tests hold `household.personA.token` and send production
+ * ops with it, so the caller has to be the one who knows it.
+ *
+ * When a `clearAll()` is outstanding this is one `test.reset` instead of a wipe plus
+ * three writes. When it is not — a test seeding a second household mid-run — it is the
+ * three writes it always was.
  */
 export async function seedHousehold(): Promise<Household> {
   const personA = { id: newId(), displayName: "Apoorva", token: newId() };
   const personB = { id: newId(), displayName: "Flatmate", token: newId() };
   const houseAssetId = newId();
-  await writeRows("People", [
+  const people: Row[] = [
     { id: personA.id, displayName: personA.displayName, token: personA.token },
     { id: personB.id, displayName: personB.displayName, token: personB.token },
-  ]);
-  await writeRows("Assets", [
+  ];
+  const assets: Row[] = [
     { id: houseAssetId, kind: "house", budget: 60 },
     { id: newId(), kind: "garden", budget: 25 },
     { id: newId(), kind: "car", budget: 30 },
-  ]);
-  await writeRows("Meta", [{ key: "timeZone", value: TIME_ZONE }]);
+  ];
+  const meta: Row[] = [{ key: "timeZone", value: TIME_ZONE }];
+
+  if (deferredClear) {
+    // Consumed, not flushed: `test.reset` performs the wipe itself, in the same lock.
+    deferredClear = false;
+    unwrap(
+      await call("test.reset", { tabs: { People: people, Assets: assets, Meta: meta } }),
+      "test.reset",
+    );
+    return { personA, personB, houseAssetId };
+  }
+
+  await writeRows("People", people);
+  await writeRows("Assets", assets);
+  await writeRows("Meta", meta);
   return { personA, personB, houseAssetId };
 }
 
@@ -503,5 +697,34 @@ export function eventsFor(events: CalendarEvent[], instanceId: string): Calendar
   return events.filter((event) => event.instanceId === instanceId);
 }
 
-/** Every test file uses the same setup/teardown, so state never leaks between runs. */
-export const TEST_TIMEOUT_MS = 60_000;
+/**
+ * The per-test and per-hook budget. Three minutes.
+ *
+ * It was 60_000, and two `beforeEach` hooks timed out on the last full run. The number
+ * has to cover the WORST healthy call, not the average one, and three things stack:
+ *
+ *   - one request is about 2.5 s of transport before any work happens, and a `sweep.run`
+ *     or a `test.reset` against a real spreadsheet and calendar is several seconds more;
+ *   - a test body makes ten or so of those in sequence;
+ *   - `send` now retries a throttled request twice, at ~1.5 s and ~4 s of backoff, so a
+ *     single unlucky call can cost three round trips plus 5.5 s of waiting.
+ *
+ * 180_000 leaves a healthy-but-slow test room to finish instead of being reported red
+ * for a reason that has nothing to do with what it asserts.
+ *
+ * ---------------------------------------------------------------------------
+ * Its relationship with `lockTimeoutMs_` in `Store.ts`
+ * ---------------------------------------------------------------------------
+ * That number — 25_000 — is pinned by THIS one, and the rule is unchanged in shape:
+ * a request that queues for the script lock for the full wait, and then loses it, must
+ * still be able to return its `ok:false` inside the test budget, because
+ * `concurrency.test.ts` asserts on that refusal and a timeout instead would report a
+ * green implementation red.
+ *
+ * The margin used to be 25 s inside 60 s. It is now 25 s inside 180 s, with the retry
+ * budget (three attempts plus ~5.5 s of backoff) sitting between them: worst case a
+ * contended call costs 3 × (25 s lock wait + transport) + 5.5 s, comfortably under three
+ * minutes. Raising the lock wait would eat that margin, so it stays at 25_000 — the
+ * headroom here is spent on slow requests and retries, not on longer queuing.
+ */
+export const TEST_TIMEOUT_MS = 180_000;

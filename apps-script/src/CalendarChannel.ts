@@ -148,8 +148,24 @@ function calendarWindow_(nowMs: number): { start: Date; end: Date } {
 
 function taggedEvents_(nowMs: number): GoogleAppsScript.Calendar.CalendarEvent[] {
   const window = calendarWindow_(nowMs);
+  return taggedEventsBetween_(window.start, window.end);
+}
+
+/**
+ * Every event this server created between two instants, and nothing else.
+ *
+ * Split out of `taggedEvents_` so a caller that knows its own bounds can say so. The
+ * only such caller is `test.clear`/`test.reset`, whose fixtures live within weeks of
+ * now rather than within the year-and-a-bit the sweep has to cover. The TAG FILTER is
+ * in here, not in the caller, so no narrower window can accidentally be paired with an
+ * unfiltered listing: an untagged event is not ours to touch at any width.
+ */
+function taggedEventsBetween_(
+  start: Date,
+  end: Date,
+): GoogleAppsScript.Calendar.CalendarEvent[] {
   return calendar_()
-    .getEvents(window.start, window.end)
+    .getEvents(start, end)
     .filter((event) => eventInstanceId_(event) !== "");
 }
 
