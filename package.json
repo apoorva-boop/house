@@ -1,0 +1,36 @@
+{
+  "name": "house-maintenance-game",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run --project unit",
+    "//test:integration": "--no-file-parallelism is required: all 6 integration files hit one Google Sheet and call clearAll() in beforeEach, so parallel workers wipe each other's fixtures. vitest's fileParallelism is a root/CLI-only setting (explicitly excluded from per-project config), so it cannot be set on the 'integration' project in vitest.config.ts and must live in this script instead. Do not remove, and do not move to the 'unit' project (which is pure and must stay parallel).",
+    "test:integration": "vitest run --project integration --no-file-parallelism",
+    "e2e": "playwright test",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint .",
+    "build:domain": "node scripts/build-domain.mjs",
+    "build:appsscript": "node scripts/build-appsscript.mjs",
+    "build": "pnpm build:domain && pnpm build:appsscript",
+    "//check:bundle": "Fails if apps-script/build/ predates the current packages/domain/src. `npx clasp push` bypasses the build and uploads whatever is in build/; this is what catches that. See the header of scripts/check-bundle.mjs.",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "clasp:config": "node scripts/write-clasp-config.mjs",
+    "clasp:push": "pnpm build && pnpm check:bundle && pnpm clasp:config && clasp push"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@google/clasp": "^3.0.6",
+    "@playwright/test": "^1.56.0",
+    "@types/google-apps-script": "^2.0.12",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.12",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^3.0.0"
+  }
+}

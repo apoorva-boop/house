@@ -1,0 +1,41 @@
+// The Apps Script integration suite. Separate from `tsconfig.json` so that ONE relaxed
+// flag reaches the tests and nothing else.
+//
+// ---------------------------------------------------------------------------
+// Why `noUncheckedIndexedAccess` is off HERE, and must never be off in the sibling
+// ---------------------------------------------------------------------------
+// These tests read a row immediately after asserting how many rows there are:
+//
+//     const instances = await instancesFor(chore.id);
+//     expect(instances).toHaveLength(1);
+//     const instanceId = String(instances[0].instanceId);
+//
+// TypeScript does not narrow from a matcher, so `instances[0]` stays `T | undefined` and
+// every one of those reads is an error. The `toHaveLength` on the line above IS the
+// guard: forcing a `!` or an `if (!row) throw` onto each read adds noise and catches
+// nothing, because a failed length assertion already ends the test.
+//
+// That reasoning holds for tests and ONLY for tests. It does not transfer to the
+// implementation in `tsconfig.json`, which reads spreadsheet rows with no such assertion
+// standing above them — there, an unchecked index read is a real bug. Never copy this
+// flag across.
+//
+// `noImplicitAny` stays ON, inherited from the base via `strict`. It is not the right
+// tool for this and turning it off would blind both projects.
+//
+// Emit lands in `dist/test` — inside the already-gitignored `dist/`, so this project
+// adds no new generated directory to ignore.
+//
+// The `reference` to ./tsconfig.json is what lets `./testkit.js` resolve: testkit.ts
+// belongs to the implementation project, and `tsc -b` builds its declarations first.
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist/test",
+    "rootDir": "src",
+    "types": ["node", "vitest"],
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src/**/*.test.ts"],
+  "references": [{ "path": "./tsconfig.json" }]
+}
