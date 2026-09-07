@@ -1,0 +1,14 @@
+// e2e's first .ts file lands with the fakeServer support module and the *.spec.ts
+// files, added alongside this config by the agent implementing PR 3's behaviour half.
+// Until then this composite project's `include` matches zero files, which `tsc -b`
+// treats as an error (TS18003) — see the comment at the top of the root tsconfig.json.
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild",
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

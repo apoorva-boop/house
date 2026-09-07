@@ -1,0 +1,295 @@
+/*
+ * Real design system, not a stub: colours for both light and dark, 44x44 minimum tap
+ * targets, and `prefers-reduced-motion` support. Two E2E tests assert this directly.
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #f7f5f0;
+  --fg: #1c1b18;
+  --panel-bg: #ffffff;
+  --panel-border: #d8d3c8;
+  --accent: #2f6f4f;
+  --accent-fg: #ffffff;
+  --danger: #a4222a;
+  --danger-fg: #ffffff;
+  --muted: #5b5748;
+  --focus-ring: #1a56db;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14140f;
+    --fg: #f1efe8;
+    --panel-bg: #1f1e18;
+    --panel-border: #3a3830;
+    --accent: #6fcf97;
+    --accent-fg: #0a1f14;
+    --danger: #ff8b8b;
+    --danger-fg: #2b0808;
+    --muted: #b8b3a4;
+    --focus-ring: #8ab4ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+input,
+select {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+}
+
+input[type="range"] {
+  min-width: 120px;
+  background: transparent;
+  border: none;
+  padding: 0.5rem 0;
+}
+
+button {
+  cursor: pointer;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: none;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--accent);
+}
+
+label {
+  display: block;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.shell-nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.sync-status {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.queue-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--bg);
+  font-size: 0.85rem;
+}
+
+.sync-error {
+  padding: 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sync-error button {
+  background: var(--danger);
+  color: var(--danger-fg);
+}
+
+.chore-list,
+.stats-screen {
+  padding: 0.75rem;
+}
+
+.asset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.5rem 0 1rem;
+}
+
+.asset-health {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  min-width: 88px;
+}
+
+.asset-health .asset-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.chore-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chore-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.chore-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.chore-due {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.rescue-banner {
+  padding: 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.empty-state {
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.chore-editor {
+  position: fixed;
+  inset: 0;
+  background: var(--panel-bg);
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+.chore-editor label {
+  margin-bottom: 0.9rem;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.editor-delete {
+  background: var(--danger);
+  color: var(--danger-fg);
+}
+
+.editor-points {
+  font-weight: 700;
+}
+
+.setup-screen {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.setup-screen section {
+  margin-bottom: 1.5rem;
+}
+
+.setup-person-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.setup-error {
+  color: var(--danger);
+}
+
+.stats-people,
+.stats-assets,
+.stats-recent {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+}
+
+.stats-person,
+.stats-asset,
+.stats-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.reset-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
