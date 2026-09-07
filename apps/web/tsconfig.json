@@ -1,0 +1,13 @@
+// The web app. `composite: true` (from the base) requires every input file to be
+// covered by `include`, and `src/**/*` covers the *.test.ts files deliberately: a
+// type error in a test is a real error, and this project's tests are frozen.
+//
+// The reference to packages/domain is what orders the build: apps/web depends on
+// @house/domain via `workspace:*`, so tsc must have built the domain's declarations
+// before it typechecks anything here.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src/**/*"],
+  "references": [{ "path": "../../packages/domain" }]
+}

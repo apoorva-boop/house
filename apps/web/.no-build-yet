@@ -1,0 +1,9 @@
+Sentinel: apps/web has no Vite build yet.
+
+While this file exists, .github/workflows/pages.yml deploys a one-page
+placeholder instead of a real build.
+
+PR 3 ("App without the map") MUST DELETE THIS FILE in the same commit that adds
+the `build` script to apps/web/package.json. Once it is gone, a failing build
+fails the Pages workflow instead of silently deploying the placeholder over the
+live site.

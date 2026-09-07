@@ -1,0 +1,10 @@
+{
+  "name": "@house/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {},
+  "comment": "dependencies MUST stay empty — this package is the native-port insurance"
+}

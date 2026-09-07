@@ -1,0 +1,16 @@
+// Solution file for `tsc -b`. It builds nothing itself ("files": []) — it only names
+// the workspaces that hold TypeScript, in dependency order, so `pnpm typecheck` from
+// the repo root typechecks all of them in one pass.
+//
+// relay/ and e2e/ have no TypeScript source yet. A composite project whose `include`
+// matches zero files is an error, so they get a tsconfig when they get their first
+// .ts file — not before. apps-script/ has source now, so it has one.
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./apps/web" },
+    { "path": "./apps-script" },
+    { "path": "./apps-script/tsconfig.test.json" }
+  ]
+}
