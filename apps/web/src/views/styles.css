@@ -14,6 +14,18 @@
   --danger-fg: #ffffff;
   --muted: #5b5748;
   --focus-ring: #1a56db;
+
+  /*
+   * The single place production CSS reads `env(safe-area-inset-*)`. Every other rule
+   * in this file (and any future one) consumes an inset through these four custom
+   * properties instead, which is what lets a test simulate a notched device just by
+   * overriding them (e.g. `:root { --safe-top: 47px; }`) -- overriding the `env()`
+   * call itself is not possible from outside the page.
+   */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -59,10 +71,10 @@ body {
  * because a fixed element ignores an ancestor's padding.
  */
 body {
-  padding-top: env(safe-area-inset-top);
-  padding-right: env(safe-area-inset-right);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
+  padding-top: var(--safe-top);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
 }
 
 #root {
@@ -247,8 +259,8 @@ label {
   position: fixed;
   inset: 0;
   background: var(--panel-bg);
-  padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
-    max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  padding: max(1.25rem, var(--safe-top)) max(1.25rem, var(--safe-right)) max(1.25rem, var(--safe-bottom))
+    max(1.25rem, var(--safe-left));
   overflow: auto;
 }
 
@@ -401,4 +413,79 @@ label {
 .stats-figure > span {
   color: var(--fg);
   font-weight: 600;
+}
+
+/*
+ * The map: full-bleed under the notch (viewport-fit=cover already asks for this in
+ * index.html) -- only the controls drawn over it respect the safe-area insets, not
+ * the map surface itself.
+ */
+.map-screen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.map-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The only touch-action override in the app, and it belongs on the map surface
+     alone -- never on `body`, which would break scrolling everywhere else. */
+  touch-action: none;
+}
+
+/*
+ * A transition on the camera's own transform, except while a pointer is down
+ * (`.map-camera-static`, toggled by usePointerGestures's `isPointerActive`): without
+ * turning it off mid-drag, the map would visibly lag behind the finger, chasing a
+ * transform value the DOM hasn't caught up to yet.
+ */
+.map-camera {
+  transition: transform 180ms ease-out;
+}
+
+.map-camera-static {
+  transition-duration: 0s;
+}
+
+.map-character {
+  position: fixed;
+  bottom: calc(0.75rem + var(--safe-bottom));
+  width: 64px;
+  height: 96px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  z-index: 2;
+}
+
+.map-character-left {
+  left: calc(0.75rem + var(--safe-left));
+}
+
+.map-character-right {
+  right: calc(0.75rem + var(--safe-right));
+}
+
+.map-zoom-controls {
+  position: fixed;
+  top: calc(0.75rem + var(--safe-top));
+  right: calc(0.75rem + var(--safe-right));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 2;
+}
+
+/* Top-left, mirroring the zoom controls' top-right, so both stay clear of the
+   character overlays pinned to the bottom corners. */
+.map-toolbar {
+  position: fixed;
+  top: calc(0.75rem + var(--safe-top));
+  left: calc(0.75rem + var(--safe-left));
+  display: flex;
+  gap: 0.5rem;
+  z-index: 2;
 }

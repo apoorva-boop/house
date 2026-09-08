@@ -71,6 +71,8 @@ test("tick survives reload offline", async ({ page }) => {
   expect(server.recorded.filter((r) => r.op === "complete")).toHaveLength(0);
 
   await page.reload();
+  // A reload re-boots the app, which lands on the map again (contract section 7).
+  await page.getByTestId("nav-chores").click();
 
   const rowAfterReload = page.locator('[data-testid="chore-row"][data-chore-id="c1"]');
   await expect(rowAfterReload).toHaveAttribute("data-pending", "true");

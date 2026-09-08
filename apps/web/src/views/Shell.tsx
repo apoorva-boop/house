@@ -7,6 +7,7 @@ import type { ChoreListPresenter } from "../presenters/ChoreListPresenter.js";
 import { SetupView } from "./SetupView.js";
 import { ChoreListView } from "./ChoreListView.js";
 import { StatsView } from "./StatsView.js";
+import { Scene } from "../map/Scene.js";
 
 function SyncStatus({ choreList }: { choreList: ChoreListPresenter }) {
   const cl = useSyncExternalStore(choreList.subscribe, choreList.snapshot);
@@ -40,14 +41,57 @@ export function Shell({ app }: { app: AppPresenter }) {
   const state = useSyncExternalStore(app.subscribe, app.snapshot);
   const choreList = app.choreList;
   const stats = app.stats;
+  const map = app.map;
 
-  if (state.screen === "setup" || choreList === null || stats === null) {
+  if (state.screen === "setup" || choreList === null || stats === null || map === null) {
     return <SetupView presenter={app.setup} />;
+  }
+
+  // Shared by the map's own toolbar and the classic shell-nav below: "add a chore"
+  // always means "show the editor", and the editor only renders inside ChoreListView,
+  // so reaching it from anywhere (including the map, the app's launch screen) means
+  // navigating to "chores" first.
+  const startAddChore = () => {
+    app.navigate("chores");
+    choreList.startCreate();
+  };
+
+  if (state.screen === "map") {
+    return (
+      <div className="app-shell" data-testid="app-shell">
+        <Scene
+          map={map}
+          onSelectAsset={() => {
+            // Opening the asset panel is a later work unit; the map's structural
+            // affordances (focusable, Enter-operable) are already in place for it.
+          }}
+          onSelectPerson={() => {
+            // Opening the person panel is a later work unit, same as above.
+          }}
+          onNavChores={() => {
+            app.navigate("chores");
+          }}
+          onNavStats={() => {
+            app.navigate("stats");
+          }}
+          onAddChore={startAddChore}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="app-shell" data-testid="app-shell">
       <nav className="shell-nav" aria-label="Primary">
+        <button
+          type="button"
+          data-testid="nav-map"
+          onClick={() => {
+            app.navigate("map");
+          }}
+        >
+          Map
+        </button>
         <button
           type="button"
           data-testid="nav-chores"
@@ -68,13 +112,7 @@ export function Shell({ app }: { app: AppPresenter }) {
         >
           Stats
         </button>
-        <button
-          type="button"
-          data-testid="nav-add"
-          onClick={() => {
-            choreList.startCreate();
-          }}
-        >
+        <button type="button" data-testid="nav-add" onClick={startAddChore}>
           Add chore
         </button>
       </nav>

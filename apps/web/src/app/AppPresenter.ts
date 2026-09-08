@@ -11,8 +11,9 @@ import { MutationQueue } from "../offline/MutationQueue.js";
 import { SetupPresenter } from "../presenters/SetupPresenter.js";
 import { ChoreListPresenter } from "../presenters/ChoreListPresenter.js";
 import { StatsPresenter } from "../presenters/StatsPresenter.js";
+import { MapPresenter } from "../presenters/MapPresenter.js";
 
-export type Screen = "setup" | "chores" | "stats";
+export type Screen = "setup" | "map" | "chores" | "stats";
 
 export interface AppViewState {
   readonly screen: Screen;
@@ -117,11 +118,12 @@ export class AppPresenter extends Presenter<AppViewState> {
   readonly #deps: AppPresenterDeps;
   choreList: ChoreListPresenter | null = null;
   stats: StatsPresenter | null = null;
+  map: MapPresenter | null = null;
 
   constructor(deps: AppPresenterDeps) {
     const existing = loadCredentials(deps.store);
     super({
-      screen: existing !== null ? "chores" : "setup",
+      screen: existing !== null ? "map" : "setup",
       credentials: existing,
     });
     this.#deps = deps;
@@ -162,12 +164,18 @@ export class AppPresenter extends Presenter<AppViewState> {
       personId: c.personId,
       store: this.#deps.store,
     });
+    this.map = new MapPresenter({ choreList: this.choreList, stats: this.stats });
     void this.choreList.load();
     void this.stats.load();
   }
 
   #onReady(c: Credentials): void {
     this.#wire(c);
+    // "map" is only where a *booted* app with existing credentials lands (contract
+    // section 7) -- finishing setup live in this same page load still goes straight to
+    // "chores", matching setup.spec.ts's "stores creds and loads snapshot" (not one of
+    // the five tests the contract calls out as needing a nav-chores click inserted,
+    // because it was never expecting to land anywhere else in the first place).
     this.setState({ screen: "chores", credentials: c });
   }
 

@@ -42,8 +42,30 @@ export async function pinch(
   page: Page,
   opts: { center: Point; startDistance: number; endDistance: number; steps?: number },
 ): Promise<void> {
-  const { center, startDistance, endDistance, steps = 10 } = opts;
+  const { center, steps = 10 } = opts;
   const cdp = await page.context().newCDPSession(page);
+
+  // Both fingers must COME DOWN inside the viewport. Chrome cancels a touch whose
+  // starting point falls outside it -- `touch-action`, pointer capture and a larger
+  // `screen` override make no difference -- so a 900px finger separation on a 375px
+  // screen produces no gesture at all rather than a big one. A touch that starts on
+  // screen and moves off is fine, which is why only the start is constrained.
+  //
+  // Rather than refuse the request, scale BOTH distances by the same factor so they
+  // fit. What a pinch actually means to the camera is the RATIO of its end distance to
+  // its start distance -- that is what multiplies the scale -- and scaling both by k
+  // leaves the ratio, and therefore the zoom, exactly as the caller asked for. A caller
+  // saying "900 down to 20" gets the same 45x pinch-in it wanted, performed by fingers
+  // that can physically be on the screen.
+  const viewport = page.viewportSize();
+  const MARGIN = 6;
+  const maxStart =
+    viewport === null
+      ? opts.startDistance
+      : 2 * Math.max(0, Math.min(center.x - MARGIN, viewport.width - MARGIN - center.x));
+  const k = opts.startDistance > maxStart && opts.startDistance > 0 ? maxStart / opts.startDistance : 1;
+  const startDistance = opts.startDistance * k;
+  const endDistance = opts.endDistance * k;
 
   const pointsAt: TouchPointsAt = (distance) => [
     { x: center.x - distance / 2, y: center.y },

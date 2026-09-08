@@ -181,6 +181,8 @@ test("legible in light and dark", async ({ page }) => {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto("/");
+    // The map is now the launch screen (contract section 7); reach the chore list from it.
+    await page.getByTestId("nav-chores").click();
     await expect(page.getByTestId("chore-list")).toBeVisible();
 
     for (const testId of ["chore-title", "chore-due", "nav-chores"]) {
