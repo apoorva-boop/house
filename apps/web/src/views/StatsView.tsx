@@ -29,8 +29,12 @@ export function StatsView({ presenter }: { presenter: StatsPresenter }) {
                 {person.displayName}
                 {person.isYou ? " (you)" : ""}
               </span>
-              <span data-testid="stats-person-points">{person.points}</span>
-              <span data-testid="stats-person-share">{person.sharePct}%</span>
+              <span className="stats-figure">
+                <span data-testid="stats-person-points">{person.points}</span> points
+              </span>
+              <span className="stats-figure">
+                <span data-testid="stats-person-share">{person.sharePct}%</span> of the work
+              </span>
             </li>
           ))}
         </ul>
@@ -40,9 +44,13 @@ export function StatsView({ presenter }: { presenter: StatsPresenter }) {
         <ul className="stats-assets">
           {state.assets.map((asset) => (
             <li key={asset.id} className="stats-asset" data-testid="stats-asset" data-asset-id={asset.id}>
-              <span>{asset.label}</span>
-              <span data-testid="stats-asset-points">{asset.points}</span>
-              <span data-testid="stats-asset-completions">{asset.completions}</span>
+              <span className="stats-asset-name">{asset.label}</span>
+              <span className="stats-figure">
+                <span data-testid="stats-asset-points">{asset.points}</span> points
+              </span>
+              <span className="stats-figure">
+                <span data-testid="stats-asset-completions">{asset.completions}</span> done
+              </span>
             </li>
           ))}
         </ul>

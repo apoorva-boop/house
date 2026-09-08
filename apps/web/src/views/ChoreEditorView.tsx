@@ -60,6 +60,7 @@ export function ChoreEditorView({ draft, points, assets, onChange, onSave, onCan
             onChange({ time: Number(e.target.value) });
           }}
         />
+        <output className="slider-value">{draft.time} of 5</output>
       </label>
 
       <label>
@@ -75,6 +76,7 @@ export function ChoreEditorView({ draft, points, assets, onChange, onSave, onCan
             onChange({ effort: Number(e.target.value) });
           }}
         />
+        <output className="slider-value">{draft.effort} of 5</output>
       </label>
 
       <label>
@@ -90,6 +92,7 @@ export function ChoreEditorView({ draft, points, assets, onChange, onSave, onCan
             onChange({ priority: Number(e.target.value) });
           }}
         />
+        <output className="slider-value">{draft.priority} of 5</output>
       </label>
 
       <label>
@@ -145,8 +148,8 @@ export function ChoreEditorView({ draft, points, assets, onChange, onSave, onCan
         />
       </label>
 
-      <p className="editor-points" data-testid="editor-points">
-        {points}
+      <p className="editor-points">
+        <span data-testid="editor-points">{points}</span> points
       </p>
 
       <div className="editor-actions">

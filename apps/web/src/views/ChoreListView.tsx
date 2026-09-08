@@ -29,10 +29,12 @@ export function ChoreListView({ presenter }: { presenter: ChoreListPresenter }) 
             <div className="rescue-banner" data-testid="rescue-banner" role="status">
               <p>{state.rescue.overdueCount} chores overdue.</p>
               {state.rescue.recommendedTitle !== null && (
-                <p>
-                  Try: {state.rescue.recommendedTitle} for {state.rescue.bonusPoints} bonus points.
-                </p>
+                <p>Start with: {state.rescue.recommendedTitle}.</p>
               )}
+              {/* `bonusPoints` is what the whole backlog is worth in extra points during
+                  the catch-up week, not what the one recommended chore pays. Attaching
+                  it to that chore promised a number nobody would be paid. */}
+              <p>{state.rescue.bonusPoints} bonus points across the backlog this week.</p>
             </div>
           )}
 
