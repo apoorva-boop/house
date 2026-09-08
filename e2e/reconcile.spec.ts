@@ -78,6 +78,8 @@ test("snapshot skips in-flight mutationIds", async ({ page }) => {
   });
   await seedCredentials(page, "p1");
   await page.goto("/");
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await page.getByTestId("nav-chores").click();
 
   // Mirror case, up front: c2's completion comes purely from the base snapshot -- no
   // queue involvement -- and renders as settled.

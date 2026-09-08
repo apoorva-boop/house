@@ -110,14 +110,39 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
 
-      # A GATE. All 12 of PR 3's browser tests pass, so a failing one is a regression.
+      # ---------------------------------------------------------------------------
+      # NOT A GATE YET - AND THAT IS TEMPORARY.
       #
-      # It was briefly not a gate: three tests failed on defects in the tests themselves,
-      # corrected by Apoorva's decision and recorded in the testing sub-plan's defect
-      # register. PR 4 adds the map's 12, which will need this relaxed again while they
-      # are written and recorded red - and tightened again as soon as they pass.
+      # All 12 of PR 3's browser tests pass. PR 4 adds the map ahead of its own
+      # implementation, so its 13 are EXPECTED to fail until that lands. A failure in
+      # any of PR 3's 12 is a real regression, whatever this step reports.
+      #
+      # EXPECTED TO FAIL, exhaustively, by name (not by count - a count goes stale the
+      # moment anyone adds a test):
+      #   e2e/map.spec.ts        - house, garden and car at default zoom on 375x667
+      #                             drag pans
+      #                             pinch clamps
+      #                             house panel lists only its overdue chores
+      #                             tick updates overlay, panel stays open
+      #                             person panel shows tier, points, share
+      #                             character positions invariant under pan
+      #                             scrim tap closes, camera preserved, focus returns
+      #   e2e/responsive.spec.ts - panel moves to side sheet, camera preserved
+      #                             no control inside safe-area insets
+      #                             375x667 targets all >= 44px
+      #   e2e/a11y.spec.ts        - zoom range reachable without a gesture
+      #                             transitions instant under prefers-reduced-motion
+      #
+      # `continue-on-error: true` means this step reports its real result - a failing
+      # run shows as a failed step with its full output - but does not fail the job.
+      # Nothing here rewrites, filters or hides the Playwright output.
+      #
+      # WHEN THE LAST TEST ABOVE GOES GREEN: delete both this comment and the
+      # `continue-on-error` line. From that point a failing Playwright test must fail CI.
+      # ---------------------------------------------------------------------------
       - name: Playwright
         run: pnpm e2e
+        continue-on-error: true
 
       - uses: actions/upload-artifact@v4
         if: always()

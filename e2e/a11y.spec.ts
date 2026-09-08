@@ -98,6 +98,8 @@ test("all controls reachable without mouse", async ({ page }) => {
   await seedCredentials(page, "p1");
   await page.reload();
   await page.getByTestId("app-shell").waitFor();
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await page.getByTestId("nav-chores").click();
 
   // Screen 2: chore list.
   await expect(page.getByTestId("chore-list")).toBeVisible();
@@ -191,4 +193,116 @@ test("legible in light and dark", async ({ page }) => {
     const statsRatio = await contrastRatioFor(page, "stats-window-points");
     expect(statsRatio, `stats-window-points in ${scheme} mode`).toBeGreaterThanOrEqual(4.5);
   }
+});
+
+/** Minimal map fixture: three assets, no chores -- these two tests only exercise the
+ *  zoom controls and the reduced-motion styling, not any asset panel content. */
+function mapFixture(): SnapshotData {
+  return {
+    people: [
+      { id: "p1", displayName: "Alice" },
+      { id: "p2", displayName: "Bob" },
+    ],
+    assets: [
+      { id: "house", kind: "house", budget: "60" },
+      { id: "garden", kind: "garden", budget: "25" },
+      { id: "car", kind: "car", budget: "30" },
+    ],
+    chores: [],
+    instances: [],
+    completions: [],
+  };
+}
+
+test("zoom range reachable without a gesture", async ({ page }) => {
+  await installFakeServer(page, { snapshot: mapFixture() });
+  await seedCredentials(page, "p1");
+  await page.goto("/");
+  await expect(page.getByTestId("map-screen")).toBeVisible();
+
+  const camera = page.getByTestId("camera");
+  const zoomIn = page.getByTestId("zoom-in");
+  const zoomOut = page.getByTestId("zoom-out");
+
+  // Both buttons are reachable by Tab alone -- no gesture anywhere in this test.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  let reachedZoomIn = false;
+  let reachedZoomOut = false;
+  for (let i = 0; i < 40 && !(reachedZoomIn && reachedZoomOut); i++) {
+    await page.keyboard.press("Tab");
+    const testId = await page.evaluate(
+      () => (document.activeElement as HTMLElement | null)?.getAttribute("data-testid") ?? null,
+    );
+    if (testId === "zoom-in") reachedZoomIn = true;
+    if (testId === "zoom-out") reachedZoomOut = true;
+  }
+  expect(reachedZoomIn).toBe(true);
+  expect(reachedZoomOut).toBe(true);
+
+  const defaultScale = Number(await camera.getAttribute("data-scale"));
+
+  await zoomIn.click();
+  const afterOneIn = Number(await camera.getAttribute("data-scale"));
+  // Reaches the range, not just the ends: one press moves off the default but does not
+  // already land on MAX_SCALE -- otherwise "clamped at 3" below would also pass against
+  // a button that snaps straight to the maximum on every press.
+  expect(afterOneIn).toBeGreaterThan(defaultScale);
+  expect(afterOneIn).toBeLessThan(3);
+
+  for (let i = 0; i < 20; i++) await zoomIn.click();
+  await expect(camera).toHaveAttribute("data-scale", "3");
+
+  await zoomOut.click();
+  const afterOneOut = Number(await camera.getAttribute("data-scale"));
+  expect(afterOneOut).toBeLessThan(3);
+  expect(afterOneOut).toBeGreaterThan(1);
+
+  for (let i = 0; i < 20; i++) await zoomOut.click();
+  await expect(camera).toHaveAttribute("data-scale", "1");
+});
+
+test("transitions instant under prefers-reduced-motion", async ({ page }) => {
+  await installFakeServer(page, { snapshot: mapFixture() });
+  await seedCredentials(page, "p1");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.getByTestId("map-screen")).toBeVisible();
+
+  const camera = page.getByTestId("camera");
+  const transformBefore = await camera.getAttribute("transform");
+
+  await page.getByTestId("zoom-in").click();
+  const transformAfterReduce = await camera.getAttribute("transform");
+  // The state change really happens under "reduce" too -- without this, the zero
+  // durations checked below would also pass against a camera frozen at its default.
+  expect(transformAfterReduce).not.toBe(transformBefore);
+
+  const cameraDurationReduce = await camera.evaluate((el) => getComputedStyle(el).transitionDuration);
+  expect(cameraDurationReduce).toBe("0s");
+
+  await page.locator('[data-testid="map-asset"][data-asset-id="house"]').click();
+  const panel = page.getByTestId("asset-panel");
+  await expect(panel).toBeVisible();
+  const panelDurationReduce = await panel.evaluate((el) => getComputedStyle(el).transitionDuration);
+  expect(panelDurationReduce).toBe("0s");
+  await page.getByTestId("panel-close").click();
+
+  // The paired half: under "no-preference", the same two durations are non-zero, and
+  // the state changes still happen the same way. Without this half, a stylesheet with
+  // no transitions defined at all would also satisfy every "reduce" assertion above.
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  const transformBeforeNoPref = await camera.getAttribute("transform");
+  await page.getByTestId("zoom-out").click();
+  const transformAfterNoPref = await camera.getAttribute("transform");
+  expect(transformAfterNoPref).not.toBe(transformBeforeNoPref);
+
+  const cameraDurationNoPref = await camera.evaluate((el) => getComputedStyle(el).transitionDuration);
+  expect(cameraDurationNoPref).not.toBe("0s");
+
+  await page.locator('[data-testid="map-asset"][data-asset-id="house"]').click();
+  await expect(panel).toBeVisible();
+  const panelDurationNoPref = await panel.evaluate((el) => getComputedStyle(el).transitionDuration);
+  expect(panelDurationNoPref).not.toBe("0s");
 });
