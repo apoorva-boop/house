@@ -118,7 +118,13 @@ test("no phantom completion on 500", async ({ page }) => {
   // an app that silently drops every completion.
   shouldFail = false;
   await page.getByTestId("sync-retry").click();
-  await expect.poll(() => server.recorded.filter((r) => r.op === "complete").length).toBe(2);
+  // Poll for the completion the server actually WROTE, not for a count of attempts.
+  // Defect #8, in the testing sub-plan's register: the reload above re-flushes the
+  // queue against the still-500 server, so a count of `complete` requests reaches 2 on
+  // two FAILED attempts before this retry is even clicked -- and the reload below then
+  // aborts the retry in flight, so nothing is ever recorded. Waiting on the write is
+  // the thing this half of the test was always about.
+  await expect.poll(() => snapshot.completions.length).toBe(1);
 
   // The retry re-sends the SAME mutationId. "Minted at enqueue, never at POST" is a
   // stated non-negotiable of this project -- a retry that minted a fresh id would write
