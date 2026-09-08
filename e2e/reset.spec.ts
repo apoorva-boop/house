@@ -82,6 +82,11 @@ test("tiers unchanged until approval", async ({ page }) => {
     const creds = JSON.parse(raw as string);
     window.localStorage.setItem("house.credentials", JSON.stringify({ ...creds, personId: "p2" }));
   });
+  // Re-seed as p2. `seedCredentials` installs an init script that re-runs on EVERY
+  // navigation, so without this it would overwrite the line above and put the device
+  // back to p1 before the app boots -- and p1 correctly cannot approve their own
+  // proposal.
+  await seedCredentials(page, "p2");
   await page.reload();
   await page.getByTestId("nav-stats").click();
 

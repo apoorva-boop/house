@@ -71,10 +71,16 @@ test("picture updates under 100ms", async ({ page }) => {
   // The matching presence: the mutation really was sent, it just hasn't been answered
   // yet -- 1500ms of latency has not elapsed, so the row is still marked pending and no
   // response has been folded in.
-  expect(server.recorded).toHaveLength(1);
-  expect(server.recorded[0]?.op).toBe("complete");
+  // Filtered to `complete`. The first request the app makes is always the `snapshot`
+  // that gives it a household to tick -- flow 2 requires that fetch, so counting every
+  // recorded request here asserted something no correct implementation could satisfy.
+  expect(server.recorded.filter((r) => r.op === "complete")).toHaveLength(1);
   await expect(row).toHaveAttribute("data-pending", "true");
 
-  // Let the delayed response land so the test doesn't leave a dangling timer running.
-  await expect(row).toHaveAttribute("data-pending", "false", { timeout: 3000 });
+  // Let the delayed responses land so the test doesn't leave a dangling timer running.
+  // Two sequential round trips at 1500ms each: the `complete`, and then the snapshot
+  // that replaces the now-stale base household. Clearing pending after the first would
+  // be worse than slower -- the queue is empty by then but the base still lacks the
+  // completion, so the chore would visibly snap back to overdue.
+  await expect(row).toHaveAttribute("data-pending", "false", { timeout: 6000 });
 });

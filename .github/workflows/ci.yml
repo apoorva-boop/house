@@ -110,29 +110,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
 
-      # ---------------------------------------------------------------------------
-      # NOT A GATE YET - AND THAT IS TEMPORARY, for a different reason than the unit
-      # suite above.
+      # A GATE. All 12 of PR 3's browser tests pass, so a failing one is a regression.
       #
-      # 9 of PR 3's 12 tests pass. The other 3 fail on defects in the TESTS, not in the
-      # app, and the tests are frozen: each was corrected in a scratch copy, the suite
-      # went 12/12, and the correction was reverted rather than committed. They are
-      # logged in the testing sub-plan's defect register and are waiting on Apoorva.
-      #
-      # EXPECTED TO FAIL, exhaustively:
-      #   e2e/tick.spec.ts    - picture updates under 100ms
-      #   e2e/offline.spec.ts - tick survives reload offline
-      #   e2e/reset.spec.ts   - tiers unchanged until approval
-      # A failure in any other test is a real regression, whatever this step reports.
-      # Named as tests rather than as a count: a count is stale the moment anyone adds
-      # one, and a stale count is worse than none.
-      #
-      # WHEN THOSE THREE ARE CORRECTED: delete this comment and the `continue-on-error`
-      # line. From that point a failing browser test must fail CI.
-      # ---------------------------------------------------------------------------
-      - name: Playwright (reported, not yet enforced - see comment above)
+      # It was briefly not a gate: three tests failed on defects in the tests themselves,
+      # corrected by Apoorva's decision and recorded in the testing sub-plan's defect
+      # register. PR 4 adds the map's 12, which will need this relaxed again while they
+      # are written and recorded red - and tightened again as soon as they pass.
+      - name: Playwright
         run: pnpm e2e
-        continue-on-error: true
 
       - uses: actions/upload-artifact@v4
         if: always()

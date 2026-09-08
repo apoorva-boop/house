@@ -62,9 +62,11 @@ test("tick survives reload offline", async ({ page }) => {
   await expect(page.getByTestId("queue-badge")).toHaveAttribute("data-count", "1");
   await expect(page.getByTestId("sync-error")).toBeVisible();
 
-  // Nothing reached the fake server while offline: the abort happens at the transport
-  // layer before a request is ever recorded.
-  expect(server.recorded).toHaveLength(0);
+  // No COMPLETE reached the fake server while offline: the abort happens at the
+  // transport layer before a request is ever recorded. Filtered, because the initial
+  // load a few lines above -- which this test requires to succeed -- already recorded a
+  // `snapshot`.
+  expect(server.recorded.filter((r) => r.op === "complete")).toHaveLength(0);
 
   await page.reload();
 
@@ -72,7 +74,7 @@ test("tick survives reload offline", async ({ page }) => {
   await expect(rowAfterReload).toHaveAttribute("data-pending", "true");
   await expect(rowAfterReload).toHaveAttribute("data-state", "scheduled");
   await expect(page.getByTestId("sync-error")).toBeVisible();
-  expect(server.recorded).toHaveLength(0);
+  expect(server.recorded.filter((r) => r.op === "complete")).toHaveLength(0);
 
   // Bring the server back and let the queue flush.
   server.offline = false;
