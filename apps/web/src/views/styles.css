@@ -51,8 +51,23 @@ body {
   line-height: 1.5;
 }
 
+/*
+ * A standalone PWA (see manifest.webmanifest's display: "standalone") has no browser
+ * chrome, so `viewport-fit=cover` (index.html) plus these insets are the only thing
+ * keeping content out from under the notch and the home indicator. Elements in normal
+ * flow get it from `body`'s padding; `position: fixed` elements below carry their own,
+ * because a fixed element ignores an ancestor's padding.
+ */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 button,
@@ -88,7 +103,8 @@ button {
   font-weight: 600;
 }
 
-button:disabled {
+button:disabled,
+button[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -117,6 +133,13 @@ label {
   gap: 0.5rem;
   padding: 0.75rem;
   border-bottom: 1px solid var(--panel-border);
+}
+
+.app-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
 .sync-status {
@@ -164,18 +187,24 @@ label {
   padding: 0.5rem 0 1rem;
 }
 
-.asset-health {
+.asset-card {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   background: var(--panel-bg);
   min-width: 88px;
+  display: flex;
+  flex-direction: column;
 }
 
-.asset-health .asset-label {
-  display: block;
+.asset-card .asset-label {
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.asset-card .asset-health {
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .chore-rows {
@@ -218,7 +247,8 @@ label {
   position: fixed;
   inset: 0;
   background: var(--panel-bg);
-  padding: 1.25rem;
+  padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
   overflow: auto;
 }
 
@@ -280,11 +310,72 @@ label {
   border-bottom: 1px solid var(--panel-border);
 }
 
+.stats-window-points {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.25rem 0 1rem;
+}
+
 .reset-panel {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.reset-caveat {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/*
+ * Portrait phone (375x667 through 430x932) is the design target; landscape is a
+ * supported second case, not an afterthought. Keyed to orientation and viewport
+ * height -- never device width -- so this reacts to a phone turned sideways the same
+ * way it would react to a tablet, rather than guessing from a brand's screen size.
+ */
+@media (orientation: landscape) {
+  .app-shell {
+    flex-direction: row;
+  }
+
+  .shell-nav {
+    flex-direction: column;
+    border-bottom: none;
+    border-right: 1px solid var(--panel-border);
+  }
+
+  .sync-status {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .app-content {
+    overflow-y: auto;
+  }
+}
+
+/* A short viewport -- a phone in landscape, or a small tablet split-view -- gets
+   tighter vertical rhythm so the row list and the editor's controls do not have to
+   scroll past their own header just to reach the first tap target. */
+@media (max-height: 480px) {
+  .chore-row,
+  .stats-person,
+  .stats-asset,
+  .stats-recent-row {
+    padding: 0.4rem 0;
+  }
+
+  .empty-state,
+  .rescue-banner {
+    padding: 0.5rem 0;
+  }
+
+  .chore-editor label {
+    margin-bottom: 0.5rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

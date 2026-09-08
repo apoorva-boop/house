@@ -1,6 +1,6 @@
-// STUB - phase 3. Dumb form over a draft the presenter already owns; `editor-points`
-// shows whatever `points` it is handed (NaN in this phase) rather than computing
-// anything itself.
+// Dumb form over a draft the presenter already owns. `editor-points` renders whatever
+// `points` it is handed — the presenter's live `weight()` of the draft — and never
+// computes anything itself.
 import type { AssetVM, ChoreDraft } from "../presenters/ChoreListPresenter.js";
 
 const RECURRENCE_UNITS = ["", "day", "week", "month", "year", "timesPerYear"] as const;
@@ -17,7 +17,7 @@ export interface ChoreEditorViewProps {
 
 export function ChoreEditorView({ draft, points, assets, onChange, onSave, onCancel, onDelete }: ChoreEditorViewProps) {
   return (
-    <div className="chore-editor" data-testid="chore-editor" role="dialog" aria-label="Chore editor">
+    <div className="chore-editor" data-testid="chore-editor" role="dialog" aria-modal="true" aria-label="Chore editor">
       <label>
         Title
         <input

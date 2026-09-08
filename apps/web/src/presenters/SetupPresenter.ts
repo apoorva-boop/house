@@ -1,9 +1,5 @@
-// STUB - phase 3. `submitCredentials` never probes the gateway and `confirmPerson`
-// never calls `onReady`, so a test that fills in the form and clicks through finds
-// every control but nothing happens after — it fails on the assertion that the app
-// moved on, not because a field or button is missing.
 import { Presenter } from "../app/Presenter.js";
-import type { Credentials } from "../app/credentials.js";
+import { saveCredentials, type Credentials } from "../app/credentials.js";
 import type { Gateway } from "../gateway/SheetsGateway.js";
 
 export interface SetupPerson {
@@ -27,11 +23,6 @@ export interface SetupPresenterDeps {
   readonly onReady: (c: Credentials) => void;
 }
 
-const STUB_PEOPLE: SetupPerson[] = [
-  { id: "stub-person-1", displayName: "Stub person one" },
-  { id: "stub-person-2", displayName: "Stub person two" },
-];
-
 export class SetupPresenter extends Presenter<SetupViewState> {
   readonly #deps: SetupPresenterDeps;
 
@@ -39,10 +30,8 @@ export class SetupPresenter extends Presenter<SetupViewState> {
     super({
       execUrl: "",
       token: "",
-      // The stub view renders both stages' markup regardless of `stage`, so
-      // `setup-person-option` is always in the DOM — see SetupView.tsx.
       stage: "credentials",
-      people: STUB_PEOPLE,
+      people: [],
       selectedPersonId: "",
       busy: false,
       error: null,
@@ -51,25 +40,67 @@ export class SetupPresenter extends Presenter<SetupViewState> {
   }
 
   setExecUrl(v: string): void {
-    this.setState({ ...this.state, execUrl: v });
+    this.setState({ ...this.state, execUrl: v, error: null });
   }
 
   setToken(v: string): void {
-    this.setState({ ...this.state, token: v });
+    this.setState({ ...this.state, token: v, error: null });
   }
 
-  /** Probes `snapshot`; on ok -> stage "person". Not wired up yet. */
+  /** Probes `snapshot`; on ok -> stage "person". Never echoes the token back. */
   async submitCredentials(): Promise<void> {
-    void this.#deps.makeGateway;
+    const execUrl = this.state.execUrl.trim();
+    const token = this.state.token;
+    if (execUrl === "" || token === "") {
+      this.setState({ ...this.state, error: "Enter both the script URL and the token." });
+      return;
+    }
+
+    this.setState({ ...this.state, busy: true, error: null });
+    const gateway = this.#deps.makeGateway(execUrl, token);
+    try {
+      const envelope = await gateway.snapshot();
+      if (!envelope.ok || envelope.data === undefined) {
+        this.setState({
+          ...this.state,
+          busy: false,
+          error: "That token was refused. Check it against the People tab and try again.",
+        });
+        return;
+      }
+      const people: SetupPerson[] = envelope.data.people
+        .map((row) => ({ id: String(row["id"] ?? ""), displayName: String(row["displayName"] ?? "") }))
+        .filter((p) => p.id !== "");
+      this.setState({
+        ...this.state,
+        busy: false,
+        stage: "person",
+        people,
+        selectedPersonId: "",
+        error: null,
+      });
+    } catch {
+      this.setState({
+        ...this.state,
+        busy: false,
+        error: "Could not reach that script URL. Check it and your connection, then try again.",
+      });
+    }
   }
 
   selectPerson(id: string): void {
     this.setState({ ...this.state, selectedPersonId: id });
   }
 
-  /** Saves credentials, calls onReady. Not wired up yet. */
+  /** Saves credentials, calls onReady. */
   confirmPerson(): void {
-    void this.#deps.store;
-    void this.#deps.onReady;
+    if (this.state.selectedPersonId === "") return;
+    const credentials: Credentials = {
+      execUrl: this.state.execUrl.trim(),
+      token: this.state.token,
+      personId: this.state.selectedPersonId,
+    };
+    saveCredentials(this.#deps.store, credentials);
+    this.#deps.onReady(credentials);
   }
 }

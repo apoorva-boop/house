@@ -1,5 +1,6 @@
-// STUB - phase 3. Routes between setup, chores and stats using AppPresenter's real
-// navigation, but the screens it routes to are themselves stubs.
+// Routes between setup, chores and stats using AppPresenter's navigation state, and
+// owns the sync status (queue badge / sync error) that sits above whichever screen is
+// showing.
 import { useSyncExternalStore } from "react";
 import type { AppPresenter } from "../app/AppPresenter.js";
 import type { ChoreListPresenter } from "../presenters/ChoreListPresenter.js";
@@ -78,9 +79,10 @@ export function Shell({ app }: { app: AppPresenter }) {
         </button>
       </nav>
 
-      <SyncStatus choreList={choreList} />
-
-      <main>{state.screen === "stats" ? <StatsView presenter={stats} /> : <ChoreListView presenter={choreList} />}</main>
+      <div className="app-content">
+        <SyncStatus choreList={choreList} />
+        <main>{state.screen === "stats" ? <StatsView presenter={stats} /> : <ChoreListView presenter={choreList} />}</main>
+      </div>
     </div>
   );
 }

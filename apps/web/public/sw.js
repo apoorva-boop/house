@@ -23,6 +23,22 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Same-origin GETs only, and nothing else.
+//
+// `clients.claim()` above means this worker controls the page from its first load, so
+// every request the app makes arrives here -- including the cross-origin POSTs to Apps
+// Script. Answering those was a real bug, not merely a noisy one: `caches.match` can
+// never hit on a POST, so each one fell through to a second `fetch` issued from inside
+// the worker. That re-issued request is a different request. It loses the page's
+// context, it is invisible to anything watching the page's own network, and it is one
+// more place a token-bearing body can go wrong for no benefit at all -- this cache
+// exists to serve the app shell offline, and nothing else.
+//
+// Returning without calling `respondWith` hands the request straight back to the
+// browser, untouched.
 self.addEventListener("fetch", (event) => {
-  event.respondWith(caches.match(event.request).then((cached) => cached ?? fetch(event.request)));
+  const request = event.request;
+  if (request.method !== "GET") return;
+  if (new URL(request.url).origin !== self.location.origin) return;
+  event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
 });
