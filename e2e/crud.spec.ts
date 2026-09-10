@@ -51,7 +51,7 @@ test("created chore visible to both", async ({ browser }) => {
     },
   });
 
-  await seedCredentials(pageA, "p1");
+  await seedCredentials(pageA);
   await pageA.goto("/");
 
   await pageA.getByTestId("nav-add").click();
@@ -84,8 +84,8 @@ test("created chore visible to both", async ({ browser }) => {
   // chore sees it -- this is the "visible to both" half, not just "visible on A".
   const contextB = await browser.newContext();
   const pageB = await contextB.newPage();
-  await installFakeServer(pageB, { snapshot: sharedSnapshot });
-  await seedCredentials(pageB, "p2");
+  await installFakeServer(pageB, { snapshot: sharedSnapshot, me: "p2" });
+  await seedCredentials(pageB);
   await pageB.goto("/");
   // The map is now the launch screen (contract section 7); reach the chore list from it.
   await pageB.getByTestId("nav-chores").click();

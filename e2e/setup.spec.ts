@@ -63,7 +63,7 @@ test("renders setup not game", async ({ page }) => {
 });
 
 test("stores creds and loads snapshot", async ({ page }) => {
-  await installFakeServer(page, { snapshot: snapshotWithTwoChores() });
+  await installFakeServer(page, { snapshot: snapshotWithTwoChores(), me: "p1" });
   await page.goto("/");
 
   await expect(page.getByTestId("setup-screen")).toBeVisible();
@@ -71,19 +71,16 @@ test("stores creds and loads snapshot", async ({ page }) => {
   await page.getByTestId("setup-token").fill(TOKEN);
   await page.getByTestId("setup-submit").click();
 
-  // submitCredentials() probed the snapshot successfully -> stage "person".
-  const options = page.getByTestId("setup-person-option");
-  await expect(options).toHaveCount(2);
-  await expect(page.locator('[data-testid="setup-person-option"][data-person-id="p1"]')).toContainText("Alice");
-  await expect(page.locator('[data-testid="setup-person-option"][data-person-id="p2"]')).toContainText("Bob");
+  // Setup is one stage. There is no "who are you?" step and no person picker: the
+  // snapshot's `me` says which People row the token belongs to, so the question the
+  // picker asked was one the server had already answered.
+  await expect(page.getByTestId("setup-person-option")).toHaveCount(0);
 
-  await page.locator('[data-testid="setup-person-option"][data-person-id="p1"]').click();
-  await page.getByTestId("setup-person-confirm").click();
-
-  // Credentials, including the chosen person, are now persisted.
+  // Credentials are the script URL and the token, and nothing else. No personId: a
+  // stored copy of who you are would be a second answer to a question the token settles.
   const stored = await page.evaluate(() => window.localStorage.getItem("house.credentials"));
   expect(stored).not.toBeNull();
-  expect(JSON.parse(stored as string)).toEqual({ execUrl: EXEC_URL, token: TOKEN, personId: "p1" });
+  expect(JSON.parse(stored as string)).toEqual({ execUrl: EXEC_URL, token: TOKEN });
 
   await expect(page.getByTestId("app-shell")).toBeVisible();
   await expect(page.getByTestId("setup-screen")).toHaveCount(0);

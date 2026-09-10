@@ -102,7 +102,7 @@ test("all controls reachable without mouse", async ({ page }) => {
   await expect(page.getByTestId("setup-screen")).toBeVisible();
   await assertFullyTabbable(page);
 
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.reload();
   await page.getByTestId("app-shell").waitFor();
   // The map is now the launch screen (contract section 7); reach the chore list from it.
@@ -183,7 +183,7 @@ async function contrastRatioFor(page: Page, testId: string): Promise<number> {
 
 test("legible in light and dark", async ({ page }) => {
   await installFakeServer(page, { snapshot: fixture() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
 
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -225,7 +225,7 @@ function mapFixture(): SnapshotData {
 
 test("zoom range reachable without a gesture", async ({ page }) => {
   await installFakeServer(page, { snapshot: mapFixture() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -272,7 +272,7 @@ test("zoom range reachable without a gesture", async ({ page }) => {
 
 test("transitions instant under prefers-reduced-motion", async ({ page }) => {
   await installFakeServer(page, { snapshot: mapFixture() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");

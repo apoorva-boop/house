@@ -68,8 +68,10 @@ export interface StatsPresenterDeps {
   readonly gateway: Gateway;
   readonly queue: MutationQueue;
   readonly now: Clock;
-  readonly timeZone: string;
-  readonly personId: string;
+  /** The household zone, read live: the snapshot can change it after construction. */
+  readonly timeZone: () => string;
+  /** Who this device is, read live for the same reason. */
+  readonly personId: () => string;
   readonly store: Storage;
 }
 
@@ -160,14 +162,14 @@ export class StatsPresenter extends Presenter<StatsViewState> {
 
   proposeReset(): void {
     const reset = this.#loadReset();
-    const proposal = propose(this.#deps.personId);
+    const proposal = propose(this.#deps.personId());
     this.#saveReset({ proposal, scoresClearedAt: reset.scoresClearedAt });
     this.#render();
   }
 
   approveReset(): void {
     const reset = this.#loadReset();
-    const approved = approve(reset.proposal, this.#deps.personId);
+    const approved = approve(reset.proposal, this.#deps.personId());
     const scoresClearedAt = approved.state === "approved" ? this.#deps.now() : reset.scoresClearedAt;
     this.#saveReset({ proposal: approved, scoresClearedAt });
     this.#render();
@@ -175,7 +177,7 @@ export class StatsPresenter extends Presenter<StatsViewState> {
 
   declineReset(): void {
     const reset = this.#loadReset();
-    const declined = decline(reset.proposal, this.#deps.personId);
+    const declined = decline(reset.proposal, this.#deps.personId());
     this.#saveReset({ proposal: declined, scoresClearedAt: reset.scoresClearedAt });
     this.#render();
   }
@@ -206,7 +208,7 @@ export class StatsPresenter extends Presenter<StatsViewState> {
       state: proposal.state,
       proposedByName,
       canPropose: proposal.state !== "proposed",
-      canApprove: proposal.state === "proposed" && proposal.proposedBy !== this.#deps.personId,
+      canApprove: proposal.state === "proposed" && proposal.proposedBy !== this.#deps.personId(),
       canDecline: proposal.state === "proposed",
     };
   }
@@ -215,7 +217,7 @@ export class StatsPresenter extends Presenter<StatsViewState> {
    *  in hand, so `propose`/`approve`/`decline` can update the screen without a tick of
    *  network latency in between. */
   #render(): void {
-    const ctx = makeCtx(this.#deps.now, this.#deps.timeZone);
+    const ctx = makeCtx(this.#deps.now, this.#deps.timeZone());
     const household = this.#household;
     const reset = this.#loadReset();
     const scoresClearedAt = reset.scoresClearedAt;
@@ -234,7 +236,7 @@ export class StatsPresenter extends Presenter<StatsViewState> {
       return {
         id: p.id,
         displayName: p.displayName,
-        isYou: p.id === this.#deps.personId,
+        isYou: p.id === this.#deps.personId(),
         points: pf?.points ?? 0,
         sharePct: Math.round((pf?.share ?? 0) * 100),
         tier: pf?.tier ?? 0,
@@ -273,7 +275,7 @@ export class StatsPresenter extends Presenter<StatsViewState> {
           assetLabel: asset !== undefined ? labelForKind(asset.kind) : c.assetId,
           personName: person?.displayName ?? c.personId,
           points: c.pointsAwarded,
-          whenLabel: formatWhen(c.completedAt, this.#deps.timeZone),
+          whenLabel: formatWhen(c.completedAt, this.#deps.timeZone()),
         };
       });
 

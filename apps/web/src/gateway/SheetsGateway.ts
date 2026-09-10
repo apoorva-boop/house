@@ -1,6 +1,16 @@
 export type Row = Record<string, string>;
 
 export interface SnapshotData {
+  /**
+   * The id of the People row the token in this gateway belongs to. `people` carries no
+   * tokens, so this is the only way a device learns which row is its own.
+   *
+   * Optional because a deployment older than the server change that added it does not
+   * send one, and the app still has to boot against it.
+   */
+  readonly me?: string;
+  /** The household zone from the `Meta` tab. Optional for the same reason as `me`. */
+  readonly timeZone?: string;
   readonly people: Row[];
   readonly assets: Row[];
   readonly chores: Row[];

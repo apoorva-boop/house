@@ -1,5 +1,5 @@
 import { Presenter } from "./Presenter.js";
-import { browserTimeZone } from "./ctx.js";
+import { browserTimeZone, householdTimeZone } from "./ctx.js";
 import { loadCredentials, type Credentials } from "./credentials.js";
 import {
   SheetsGateway,
@@ -53,8 +53,18 @@ interface CachedSnapshot {
  * still down: without a cached base to overlay it onto, `applyPending` would have
  * nothing to work with, because a queued `complete` mutation carries only
  * `{instanceId, choreId, completedAt}` -- not the chore's own title or recurrence.
+ *
+ * `onSnapshot` fires on every snapshot the presenters see, cached ones included, and it
+ * fires HERE rather than in the presenters because both of them load and this must
+ * happen exactly once per response, before either reads a row. It is how `me` and
+ * `timeZone` reach the app: the offline path serves them from the cache along with the
+ * rows they belong to, so a boot with no network still knows whose phone this is.
  */
-function withSnapshotCache(inner: Gateway, store: Storage): Gateway {
+function withSnapshotCache(
+  inner: Gateway,
+  store: Storage,
+  onSnapshot: (data: SnapshotData) => void,
+): Gateway {
   // Two presenters share one gateway and both load on boot, so two identical snapshot
   // requests would go out a millisecond apart. This holds the first one's promise and
   // hands it to anyone who asks while it is still in flight -- one round trip, both
@@ -79,6 +89,7 @@ function withSnapshotCache(inner: Gateway, store: Storage): Gateway {
     try {
       const envelope = await inner.snapshot();
       if (envelope.ok && envelope.data !== undefined) {
+        onSnapshot(envelope.data);
         try {
           const cached: CachedSnapshot = {
             data: envelope.data,
@@ -97,6 +108,7 @@ function withSnapshotCache(inner: Gateway, store: Storage): Gateway {
       if (raw === null) throw err;
       try {
         const cached = JSON.parse(raw) as CachedSnapshot;
+        onSnapshot(cached.data);
         return {
           ok: true,
           data: cached.data,
@@ -124,6 +136,14 @@ export class AppPresenter extends Presenter<AppViewState> {
   assetPanel: AssetPanelPresenter | null = null;
   personPanel: PersonPanelPresenter | null = null;
 
+  // Who this device is and what zone the household keeps, both answered by the server on
+  // every snapshot. They are held here, and read through the callbacks handed to the
+  // presenters, because the presenters are built before the first snapshot arrives and
+  // the answers must not be frozen at that moment. The starting values are what the app
+  // can honestly say before it has asked: nobody, and the phone's own zone.
+  #personId = "";
+  #timeZone = browserTimeZone();
+
   constructor(deps: AppPresenterDeps) {
     const existing = loadCredentials(deps.store);
     super({
@@ -141,31 +161,48 @@ export class AppPresenter extends Presenter<AppViewState> {
     if (existing !== null) this.#wire(existing);
   }
 
+  /**
+   * Takes the caller's identity and the household's zone off a snapshot.
+   *
+   * The two treat a missing field differently, on purpose. A zone has a real fallback —
+   * the browser's — so it is recomputed every time. An identity has none: there is
+   * nothing on the device to fall back to any more, so an absent `me` leaves whatever the
+   * last good snapshot said rather than blanking the app back to "nobody". A deployment
+   * older than the server change sends neither field, and `SetupPresenter` refuses to
+   * finish setup against one, so this path is the already-installed case only.
+   */
+  #adopt(data: SnapshotData): void {
+    if (data.me !== undefined && data.me !== "") this.#personId = data.me;
+    this.#timeZone = householdTimeZone(data.timeZone);
+  }
+
   #wire(c: Credentials): void {
     const gateway = withSnapshotCache(
       makeGateway(c.execUrl, c.token),
       this.#deps.store,
+      (data) => {
+        this.#adopt(data);
+      },
     );
     const queue = new MutationQueue(
       this.#deps.idb,
       this.#deps.newId,
       this.#deps.now,
     );
-    const timeZone = browserTimeZone();
     this.choreList = new ChoreListPresenter({
       gateway,
       queue,
       now: this.#deps.now,
-      timeZone,
-      personId: c.personId,
+      timeZone: () => this.#timeZone,
+      personId: () => this.#personId,
       newId: this.#deps.newId,
     });
     this.stats = new StatsPresenter({
       gateway,
       queue,
       now: this.#deps.now,
-      timeZone,
-      personId: c.personId,
+      timeZone: () => this.#timeZone,
+      personId: () => this.#personId,
       store: this.#deps.store,
     });
     this.map = new MapPresenter({ choreList: this.choreList, stats: this.stats });

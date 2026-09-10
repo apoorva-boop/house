@@ -36,7 +36,7 @@ function parseCameraTransform(transform: string): { tx: number; ty: number; scal
 
 test("house, garden and car at default zoom on 375x667", async ({ page }) => {
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -59,7 +59,7 @@ test("house, garden and car at default zoom on 375x667", async ({ page }) => {
 
 test("drag pans", async ({ page }) => {
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -106,7 +106,7 @@ test("drag pans", async ({ page }) => {
 
 test("pinch clamps", async ({ page }) => {
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -234,7 +234,7 @@ function houseAndGardenChoresFixture(): SnapshotData {
 
 test("house panel lists only its overdue chores", async ({ page }) => {
   await installFakeServer(page, { snapshot: houseAndGardenChoresFixture() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -344,7 +344,7 @@ test("tick updates overlay, panel stays open", async ({ page }) => {
     snapshot,
     handler: settlesCompletion(snapshot, { nextDueAt: "", pointsAwarded: "21" }),
   });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -446,7 +446,7 @@ function personPanelFixture(): SnapshotData {
 
 test("person panel shows tier, points, share", async ({ page }) => {
   await installFakeServer(page, { snapshot: personPanelFixture() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -462,7 +462,7 @@ test("person panel shows tier, points, share", async ({ page }) => {
 
 test("character positions invariant under pan", async ({ page }) => {
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -500,7 +500,7 @@ test("character positions invariant under pan", async ({ page }) => {
 
 test("scrim tap closes, camera preserved, focus returns", async ({ page }) => {
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 

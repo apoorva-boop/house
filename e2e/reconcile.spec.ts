@@ -76,7 +76,7 @@ test("snapshot skips in-flight mutationIds", async ({ page }) => {
     snapshot: fixture(),
     handler: (r: Recorded) => (r.op === "complete" ? { status: 500, body: {} } : null),
   });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   // The map is now the launch screen (contract section 7); reach the chore list from it.
   await page.getByTestId("nav-chores").click();

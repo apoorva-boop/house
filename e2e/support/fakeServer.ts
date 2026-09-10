@@ -43,6 +43,24 @@ export interface FakeServer {
   readonly recorded: Recorded[];
   /** Rows the next `snapshot` will return. Mutate between calls to simulate the server. */
   snapshot: SnapshotData;
+  /**
+   * The `me` the next `snapshot` will report — the People row the token belongs to.
+   *
+   * This is what decides who the app thinks it is, exactly as on the real server, where
+   * `authenticate_` resolves it from the token and `people` carries no tokens at all. It
+   * lives on the server handle rather than in each spec's row fixture because it is a
+   * fact about the caller, not a row in the household, and because a spec that switches
+   * person mid-test is switching who is asking, not editing the sheet.
+   */
+  me: string;
+  /**
+   * The `timeZone` the next `snapshot` will report — the household's `Meta` row.
+   *
+   * Empty by default, which is the app's documented fallback path: it then uses the
+   * browser's zone, which is what every spec written before the field existed assumed.
+   * A spec that cares sets it.
+   */
+  timeZone: string;
   version: number;
   /** Per-op override. Return null to fall through to the default behaviour. */
   handler: ((r: Recorded) => { status?: number; body?: unknown } | null) | null;
@@ -67,7 +85,12 @@ const KNOWN_OPS_WITH_BLAND_DEFAULT = new Set([
 /** The response used when a spec has not supplied a `handler` override for this op. */
 function defaultEnvelope(op: string, server: FakeServer, serverTime: string): Envelope<unknown> {
   if (op === "snapshot") {
-    return { ok: true, data: server.snapshot, serverTime, version: server.version };
+    return {
+      ok: true,
+      data: { me: server.me, timeZone: server.timeZone, ...server.snapshot },
+      serverTime,
+      version: server.version,
+    };
   }
   if (KNOWN_OPS_WITH_BLAND_DEFAULT.has(op)) {
     // A bland, content-free success. Specs that need the response to carry anything
@@ -110,6 +133,8 @@ export async function installFakeServer(page: Page, initial?: Partial<FakeServer
   const server: FakeServer = {
     recorded: [],
     snapshot: initial?.snapshot ?? emptySnapshot(),
+    me: initial?.me ?? "p1",
+    timeZone: initial?.timeZone ?? "",
     version: initial?.version ?? 1,
     handler: initial?.handler ?? null,
     offline: initial?.offline ?? false,
@@ -214,12 +239,18 @@ export function settlesCompletion(
   };
 }
 
-/** Writes credentials into localStorage before the app boots. */
-export async function seedCredentials(page: Page, personId = "p1"): Promise<void> {
+/**
+ * Writes credentials into localStorage before the app boots.
+ *
+ * There is no person here. Credentials are the script URL and the token; who that token
+ * belongs to is the server's answer, and the fake server gives it in `me`. A spec that
+ * needs to be somebody in particular sets `server.me`, not this.
+ */
+export async function seedCredentials(page: Page): Promise<void> {
   await page.addInitScript(
-    ({ execUrl, token, personId }: { execUrl: string; token: string; personId: string }) => {
-      window.localStorage.setItem("house.credentials", JSON.stringify({ execUrl, token, personId }));
+    ({ execUrl, token }: { execUrl: string; token: string }) => {
+      window.localStorage.setItem("house.credentials", JSON.stringify({ execUrl, token }));
     },
-    { execUrl: EXEC_URL, token: TOKEN, personId }
+    { execUrl: EXEC_URL, token: TOKEN }
   );
 }
