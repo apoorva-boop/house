@@ -28,6 +28,13 @@ const SURFACE_DELTA_E_MIN = 10;
  */
 const GROUND_TO_PAGE_MAX = 3;
 
+/**
+ * ...and still a surface you can see: the lot's edge is what makes panning past the
+ * property mean anything. A ground painted the page's own colour scores 0 here; main
+ * gives 18 light and 20 dark.
+ */
+const GROUND_TO_PAGE_DELTA_E_MIN = 5;
+
 function threeAssets(): SnapshotData {
   return {
     people: [
@@ -90,7 +97,10 @@ function rgbOf(value: string, what: string): Rgb {
  * The computed fill of the largest opaque shape inside one asset's `<g>` -- its
  * dominant surface: the house's bigger wall, the lawn, the car's roof. Read off the
  * rendered elements, not the token table, so what is measured is what the theme
- * actually painted. The asset's hit silhouette (fill-opacity 0) is skipped.
+ * actually painted. The asset's hit silhouette (fill-opacity 0) is skipped. Polygons,
+ * rects and circles are all the assets draw today; any other painted shape throws, so a
+ * future asset whose biggest surface is a <path> fails here instead of being passed
+ * over for a smaller polygon.
  */
 async function dominantSurfaceFill(page: Page, assetId: string): Promise<{ fill: string; area: number }> {
   return page.locator(`[data-testid="map-asset"][data-asset-id="${assetId}"]`).evaluate((group) => {
@@ -111,13 +121,17 @@ async function dominantSurfaceFill(page: Page, assetId: string): Promise<{ fill:
       return Math.abs(sum) / 2;
     }
     let best: { fill: string; area: number } | null = null;
-    for (const el of Array.from(group.querySelectorAll("polygon, rect"))) {
+    const shapes = Array.from(group.querySelectorAll("polygon, rect, circle, ellipse, path, polyline"));
+    for (const el of shapes) {
       const style = getComputedStyle(el);
       if (style.fill === "none" || parseFloat(style.fillOpacity) === 0) continue;
-      const area =
-        el.tagName.toLowerCase() === "rect"
-          ? parseFloat(el.getAttribute("width") ?? "0") * parseFloat(el.getAttribute("height") ?? "0")
-          : polygonArea(el.getAttribute("points") ?? "");
+      const tag = el.tagName.toLowerCase();
+      const attr = (name: string) => parseFloat(el.getAttribute(name) ?? "0");
+      let area: number;
+      if (tag === "polygon") area = polygonArea(el.getAttribute("points") ?? "");
+      else if (tag === "rect") area = attr("width") * attr("height");
+      else if (tag === "circle") area = Math.PI * attr("r") * attr("r");
+      else throw new Error(`map-asset ${group.getAttribute("data-asset-id")} paints a <${tag}>; teach dominantSurfaceFill its area`);
       if (best === null || area > best.area) best = { fill: style.fill, area };
     }
     if (best === null) throw new Error(`no painted shape inside map-asset ${group.getAttribute("data-asset-id")}`);
@@ -170,6 +184,10 @@ test("the scene follows the theme, and each object stands clear of the ground", 
       contrastRatio(ground, rgbOf(pageBackground, `page in ${scheme}`)),
       `ground ${groundFill} against the page ${pageBackground} in ${scheme}`,
     ).toBeLessThan(GROUND_TO_PAGE_MAX);
+    expect(
+      deltaE(ground, rgbOf(pageBackground, `page in ${scheme}`)),
+      `ground ${groundFill} against the page ${pageBackground} in ${scheme}`,
+    ).toBeGreaterThanOrEqual(GROUND_TO_PAGE_DELTA_E_MIN);
 
     for (const assetId of ["house", "garden", "car"] as const) {
       const surface = await dominantSurfaceFill(page, assetId);

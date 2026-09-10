@@ -9,9 +9,12 @@ import react from "@vitejs/plugin-react";
 // port through HOUSE_WEB_PORT (e2e/support/devServerPort.ts), so two checkouts can run
 // their browser suites at once and a suite never reaches a server another checkout
 // started.
-const port = Number(process.env.HOUSE_WEB_PORT ?? 5173);
-if (!Number.isInteger(port)) {
-  throw new Error(`HOUSE_WEB_PORT must be a port number, got "${process.env.HOUSE_WEB_PORT}"`);
+const rawPort = process.env.HOUSE_WEB_PORT;
+const port = rawPort === undefined || rawPort === "" ? 5173 : Number(rawPort);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+  // `Number("")` is 0 and would pass an integer check, and strictPort on port 0 binds
+  // an ephemeral port Playwright then waits on forever. Same range as devServerPort.
+  throw new Error(`HOUSE_WEB_PORT must be a port number between 1024 and 65535, got "${rawPort}"`);
 }
 
 export default defineConfig({

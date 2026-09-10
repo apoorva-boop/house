@@ -2,8 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 import { devServerPort } from "./e2e/support/devServerPort";
 
 // One port per worktree, and never a borrowed server. Both halves of the reasoning
-// live in e2e/support/devServerPort.ts.
-const port = devServerPort(process.cwd());
+// live in e2e/support/devServerPort.ts. Keyed on this file's own directory -- the
+// worktree root -- not on process.cwd(), which `pnpm exec playwright test` leaves at
+// whatever subdirectory it was run from.
+const port = devServerPort(import.meta.dirname);
 const origin = `http://127.0.0.1:${port}`;
 
 // Chromium only: this project has no cross-browser requirement yet.
