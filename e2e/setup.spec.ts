@@ -85,10 +85,16 @@ test("stores creds and loads snapshot", async ({ page }) => {
   expect(stored).not.toBeNull();
   expect(JSON.parse(stored as string)).toEqual({ execUrl: EXEC_URL, token: TOKEN, personId: "p1" });
 
-  // The household from that snapshot is what's on screen now -- specific titles, not
-  // just "something rendered".
   await expect(page.getByTestId("app-shell")).toBeVisible();
   await expect(page.getByTestId("setup-screen")).toHaveCount(0);
+  // Finishing setup lands on the map, like every later launch (plan section 3a; #12,
+  // defect 16 in the testing register). The chore list is one click away from it.
+  await expect(page.getByTestId("map-screen")).toBeVisible();
+  await page.getByTestId("nav-chores").click();
+  await expect(page.getByTestId("chore-list")).toBeVisible();
+
+  // The household from that snapshot is what's on screen now -- specific titles, not
+  // just "something rendered".
   const titles = await page.getByTestId("chore-title").allTextContents();
   expect(titles.sort()).toEqual(["Mow the lawn", "Vacuum the lounge"]);
 });
