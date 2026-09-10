@@ -78,6 +78,8 @@ test("snapshot skips in-flight mutationIds", async ({ page }) => {
   });
   await seedCredentials(page, "p1");
   await page.goto("/");
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await page.getByTestId("nav-chores").click();
 
   // Mirror case, up front: c2's completion comes purely from the base snapshot -- no
   // queue involvement -- and renders as settled.
@@ -112,6 +114,8 @@ test("snapshot skips in-flight mutationIds", async ({ page }) => {
   // the queue back out of IndexedDB. Weaker because it also proves persistence, which is
   // flow 7's job -- the click above is what proves the merge.
   await page.reload();
+  // A reload re-boots the app, which lands on the map again (contract section 7).
+  await page.getByTestId("nav-chores").click();
 
   const rowC1After = page.locator('[data-testid="chore-row"][data-chore-id="c1"]');
   await expect(rowC1After).toHaveAttribute("data-pending", "true");

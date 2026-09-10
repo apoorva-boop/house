@@ -205,8 +205,19 @@ export default tseslint.config(
   // insurance: a future iOS/Android port swaps every view for a native screen and
   // keeps every presenter unchanged, but only if a view never reaches into the domain
   // model directly.
+  //
+  // PR 4 puts view code in two more directories, so both are named here rather than
+  // left as a hole in the rule. `src/art` draws the isometric objects and `src/map`
+  // holds the scene and its pointer gestures -- both are views by every definition
+  // except their path. `src/map/Camera.ts` is not a view at all, it is pure maths, but
+  // it has no business importing the domain either, so one selector covers the
+  // directory.
   {
-    files: ["apps/web/src/views/**/*.{ts,tsx}"],
+    files: [
+      "apps/web/src/views/**/*.{ts,tsx}",
+      "apps/web/src/art/**/*.{ts,tsx}",
+      "apps/web/src/map/**/*.{ts,tsx}",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -215,7 +226,7 @@ export default tseslint.config(
             {
               group: ["@house/domain", "@house/domain/*"],
               message:
-                "A view renders what a presenter already decided. Flatten @house/domain values into primitives in the presenter — importing it here is the thing PR 3's native-port insurance forbids.",
+                "A view renders what a presenter already decided. Flatten @house/domain values into primitives in the presenter — importing it here is the thing the native-port insurance forbids.",
             },
           ],
         },

@@ -87,6 +87,8 @@ test("created chore visible to both", async ({ browser }) => {
   await installFakeServer(pageB, { snapshot: sharedSnapshot });
   await seedCredentials(pageB, "p2");
   await pageB.goto("/");
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await pageB.getByTestId("nav-chores").click();
 
   const rowOnB = pageB.locator('[data-testid="chore-row"][data-chore-id="created-1"]');
   await expect(rowOnB.getByTestId("chore-title")).toHaveText("Clean the car interior");

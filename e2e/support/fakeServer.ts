@@ -165,6 +165,55 @@ export async function installFakeServer(page: Page, initial?: Partial<FakeServer
   return server;
 }
 
+/**
+ * A `handler` that makes `complete` behave the way the deployed server does instead of
+ * swallowing the write: it appends the `Completions` row and settles the chore, so the
+ * NEXT snapshot reflects the tick.
+ *
+ * Without it the default `complete` response is a bland `{ok:true}` and the snapshot
+ * still shows the chore overdue — so the app correctly re-fetches after the flush,
+ * correctly finds the server disagreeing with the optimistic state, and correctly
+ * reverts. A test that ticks and then asserts the *settled* result is asserting a state
+ * that only exists for the few milliseconds between the enqueue and the reload, and it
+ * wins or loses on timing. `stats.spec.ts` and `failure.spec.ts` already supply their
+ * own recording handlers for exactly this reason; this is that, shared.
+ *
+ * `nextDueAt` is supplied by the caller rather than computed here. Working out when a
+ * chore next falls due is `recurrence.ts`'s job, and this stub must never decide
+ * anything a spec is meant to be proving — it only records what it is told.
+ */
+export function settlesCompletion(
+  snapshot: SnapshotData,
+  settled: { readonly nextDueAt: string; readonly personId?: string; readonly pointsAwarded?: string },
+): (r: Recorded) => null {
+  return (r) => {
+    if (r.op !== "complete") return null;
+    const instanceId = String(r.payload["instanceId"] ?? "");
+    const choreId = String(r.payload["choreId"] ?? "");
+    const completedAt = String(r.payload["completedAt"] ?? "");
+
+    const openIndex = snapshot.instances.findIndex((i) => i["instanceId"] === instanceId);
+    if (openIndex >= 0) snapshot.instances.splice(openIndex, 1);
+
+    const chore = snapshot.chores.find((c) => c["id"] === choreId);
+    if (chore !== undefined) chore["nextDueAt"] = settled.nextDueAt;
+
+    snapshot.completions.push({
+      mutationId: r.mutationId,
+      instanceId,
+      choreId,
+      personId: settled.personId ?? "p1",
+      completedAt,
+      pointsAwarded: settled.pointsAwarded ?? "0",
+      choreTitle: chore?.["title"] ?? "",
+      assetId: chore?.["assetId"] ?? "",
+    });
+    // Null falls through to the bland default response. What these tests care about is
+    // what the server now HOLDS, not what it said.
+    return null;
+  };
+}
+
 /** Writes credentials into localStorage before the app boots. */
 export async function seedCredentials(page: Page, personId = "p1"): Promise<void> {
   await page.addInitScript(

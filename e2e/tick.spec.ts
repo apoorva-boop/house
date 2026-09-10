@@ -51,6 +51,8 @@ test("picture updates under 100ms", async ({ page }) => {
   const server = await installFakeServer(page, { snapshot: overdueFixture(), latencyMs: 1500 });
   await seedCredentials(page, "p1");
   await page.goto("/");
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await page.getByTestId("nav-chores").click();
 
   const health = page.locator('[data-testid="asset-health"][data-asset-id="house"]');
   const row = page.locator('[data-testid="chore-row"][data-chore-id="c1"]');

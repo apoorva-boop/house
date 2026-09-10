@@ -45,6 +45,8 @@ test("tick survives reload offline", async ({ page }) => {
   const server = await installFakeServer(page, { snapshot: fixture("c1", "Clean the gutters") });
   await seedCredentials(page, "p1");
   await page.goto("/");
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await page.getByTestId("nav-chores").click();
 
   const row = page.locator('[data-testid="chore-row"][data-chore-id="c1"]');
   await expect(row).toHaveAttribute("data-state", "overdue");
@@ -69,6 +71,8 @@ test("tick survives reload offline", async ({ page }) => {
   expect(server.recorded.filter((r) => r.op === "complete")).toHaveLength(0);
 
   await page.reload();
+  // A reload re-boots the app, which lands on the map again (contract section 7).
+  await page.getByTestId("nav-chores").click();
 
   const rowAfterReload = page.locator('[data-testid="chore-row"][data-chore-id="c1"]');
   await expect(rowAfterReload).toHaveAttribute("data-pending", "true");
@@ -90,6 +94,8 @@ test("drop falls into queue", async ({ page }) => {
   const server = await installFakeServer(page, { snapshot: fixture("c2", "Check the smoke alarms") });
   await seedCredentials(page, "p1");
   await page.goto("/");
+  // The map is now the launch screen (contract section 7); reach the chore list from it.
+  await page.getByTestId("nav-chores").click();
 
   const row = page.locator('[data-testid="chore-row"][data-chore-id="c2"]');
   await expect(row).toHaveAttribute("data-state", "overdue");
