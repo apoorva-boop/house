@@ -12,6 +12,8 @@ import { SetupPresenter } from "../presenters/SetupPresenter.js";
 import { ChoreListPresenter } from "../presenters/ChoreListPresenter.js";
 import { StatsPresenter } from "../presenters/StatsPresenter.js";
 import { MapPresenter } from "../presenters/MapPresenter.js";
+import { AssetPanelPresenter } from "../presenters/AssetPanelPresenter.js";
+import { PersonPanelPresenter } from "../presenters/PersonPanelPresenter.js";
 
 export type Screen = "setup" | "map" | "chores" | "stats";
 
@@ -119,6 +121,8 @@ export class AppPresenter extends Presenter<AppViewState> {
   choreList: ChoreListPresenter | null = null;
   stats: StatsPresenter | null = null;
   map: MapPresenter | null = null;
+  assetPanel: AssetPanelPresenter | null = null;
+  personPanel: PersonPanelPresenter | null = null;
 
   constructor(deps: AppPresenterDeps) {
     const existing = loadCredentials(deps.store);
@@ -165,6 +169,8 @@ export class AppPresenter extends Presenter<AppViewState> {
       store: this.#deps.store,
     });
     this.map = new MapPresenter({ choreList: this.choreList, stats: this.stats });
+    this.assetPanel = new AssetPanelPresenter({ choreList: this.choreList });
+    this.personPanel = new PersonPanelPresenter({ stats: this.stats });
     void this.choreList.load();
     void this.stats.load();
   }

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { installFakeServer, seedCredentials, type SnapshotData } from "./support/fakeServer";
+import { installFakeServer, seedCredentials, settlesCompletion, type SnapshotData } from "./support/fakeServer";
 
 const DAY_MS = 86_400_000;
 
@@ -88,7 +88,14 @@ async function assertFullyTabbable(page: Page): Promise<void> {
 }
 
 test("all controls reachable without mouse", async ({ page }) => {
-  await installFakeServer(page, { snapshot: fixture() });
+  // The tick below is asserted on its SETTLED result, so the server has to keep the
+  // write. c1 recurs daily, so a completion leaves it due tomorrow -- "scheduled".
+  // Defect 14 in the testing sub-plan's register.
+  const snapshot = fixture();
+  await installFakeServer(page, {
+    snapshot,
+    handler: settlesCompletion(snapshot, { nextDueAt: new Date(Date.now() + DAY_MS).toISOString() }),
+  });
   await page.goto("/");
 
   // Screen 1: setup (credentials stage).

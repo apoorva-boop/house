@@ -111,12 +111,23 @@ export class MapPresenter extends Presenter<MapViewState> {
   setViewport(viewport: Rect): void {
     const first = this.#viewport === PLACEHOLDER_VIEWPORT;
     this.#viewport = viewport;
+    if (!first) {
+      // A later viewport change — an orientation rotation, a resize — must NOT touch
+      // the camera at all. e2e/responsive.spec.ts's "panel moves to side sheet, camera
+      // preserved" asserts the camera's `transform` string is byte-identical across a
+      // rotation, and re-clamping here would silently move tx/ty whenever the new
+      // viewport's dimensions happen to produce a different clamp range. It is safe to
+      // leave a since-resized camera un-reclamped: every real gesture (panBy,
+      // zoomToScale, fitAsset) composes `clamp` against `#viewport` itself before it
+      // ever touches state, so an out-of-range camera is corrected on the next
+      // interaction rather than silently on every resize.
+      return;
+    }
     // On the very first real measurement there has been no user interaction yet, so
     // re-centre rather than merely clamping the placeholder-sized default — a 375x667
     // placeholder and the view's first real measurement are usually the same size, but
     // need not be (a wider phone, a resize before mount finishes).
-    const camera = first ? defaultCamera(viewport) : clamp(this.state.camera, SCENE_BOUNDS, viewport);
-    this.setState({ ...this.state, camera });
+    this.setState({ ...this.state, camera: defaultCamera(viewport) });
   }
 
   panBy(dx: number, dy: number): void {

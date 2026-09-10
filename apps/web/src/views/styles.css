@@ -489,3 +489,115 @@ label {
   gap: 0.5rem;
   z-index: 2;
 }
+
+/*
+ * The asset/person panel and its scrim (map contract section 3). Above every map
+ * overlay (z-index 2 above). Sized to the backdrop the open sheet leaves visible, not
+ * the full viewport: the sheet sits above it (z-index 11) and would otherwise cover the
+ * scrim's own geometric centre whenever the sheet is more than half the screen (a 60vh
+ * portrait bottom sheet always is), which is exactly the point Playwright's default
+ * `.click()` targets — a full-viewport scrim would make that click land on the sheet
+ * instead and never dismiss anything.
+ */
+.panel-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 8, 0.4);
+  border: none;
+  padding: 0;
+  z-index: 10;
+}
+
+@media (orientation: portrait) {
+  .panel-scrim {
+    bottom: 60vh;
+  }
+}
+
+@media (orientation: landscape) {
+  .panel-scrim {
+    right: 45vw;
+  }
+}
+
+/*
+ * One shared sheet shape for both panels. Orientation and viewport height decide the
+ * layout, never device width (contract section 4), so a phone turned sideways gets the
+ * same side-sheet a tablet split-view would, rather than a guess keyed to a brand's
+ * screen size. A single `transform` transition (not a shorthand covering several
+ * properties) is what lets prefers-reduced-motion collapse `transitionDuration` to the
+ * exact string "0s" rather than a comma-separated list.
+ */
+.panel-sheet {
+  position: fixed;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  overflow-y: auto;
+  transition: transform 220ms ease-out;
+}
+
+.panel-sheet:focus {
+  outline: none;
+}
+
+.panel-sheet h2 {
+  margin: 0;
+}
+
+/* Portrait: a bottom sheet, full width, ~60% of the viewport height, anchored to the
+   bottom edge. Its own controls are padded clear of --safe-bottom (and the side
+   insets), even though the sheet itself still touches the physical edge. */
+@media (orientation: portrait) {
+  .panel-sheet {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 60vh;
+    max-height: 60vh;
+    border-radius: 16px 16px 0 0;
+    padding: 1rem max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom)) max(1rem, var(--safe-left));
+  }
+}
+
+/* Landscape: a right-hand side sheet, full height, under half the viewport width,
+   anchored to the right edge. */
+@media (orientation: landscape) {
+  .panel-sheet {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 45vw;
+    max-width: 45vw;
+    border-radius: 16px 0 0 16px;
+    padding: max(1rem, var(--safe-top)) max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom)) 1rem;
+  }
+}
+
+.panel-chore-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+}
+
+.panel-chore-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.panel-chore-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.panel-chore-due {
+  color: var(--muted);
+  font-size: 0.9rem;
+}

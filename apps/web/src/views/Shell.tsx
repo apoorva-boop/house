@@ -7,7 +7,7 @@ import type { ChoreListPresenter } from "../presenters/ChoreListPresenter.js";
 import { SetupView } from "./SetupView.js";
 import { ChoreListView } from "./ChoreListView.js";
 import { StatsView } from "./StatsView.js";
-import { Scene } from "../map/Scene.js";
+import { MapScreen } from "./MapScreen.js";
 
 function SyncStatus({ choreList }: { choreList: ChoreListPresenter }) {
   const cl = useSyncExternalStore(choreList.subscribe, choreList.snapshot);
@@ -42,8 +42,17 @@ export function Shell({ app }: { app: AppPresenter }) {
   const choreList = app.choreList;
   const stats = app.stats;
   const map = app.map;
+  const assetPanel = app.assetPanel;
+  const personPanel = app.personPanel;
 
-  if (state.screen === "setup" || choreList === null || stats === null || map === null) {
+  if (
+    state.screen === "setup" ||
+    choreList === null ||
+    stats === null ||
+    map === null ||
+    assetPanel === null ||
+    personPanel === null
+  ) {
     return <SetupView presenter={app.setup} />;
   }
 
@@ -58,25 +67,18 @@ export function Shell({ app }: { app: AppPresenter }) {
 
   if (state.screen === "map") {
     return (
-      <div className="app-shell" data-testid="app-shell">
-        <Scene
-          map={map}
-          onSelectAsset={() => {
-            // Opening the asset panel is a later work unit; the map's structural
-            // affordances (focusable, Enter-operable) are already in place for it.
-          }}
-          onSelectPerson={() => {
-            // Opening the person panel is a later work unit, same as above.
-          }}
-          onNavChores={() => {
-            app.navigate("chores");
-          }}
-          onNavStats={() => {
-            app.navigate("stats");
-          }}
-          onAddChore={startAddChore}
-        />
-      </div>
+      <MapScreen
+        map={map}
+        assetPanel={assetPanel}
+        personPanel={personPanel}
+        onNavChores={() => {
+          app.navigate("chores");
+        }}
+        onNavStats={() => {
+          app.navigate("stats");
+        }}
+        onAddChore={startAddChore}
+      />
     );
   }
 

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { installFakeServer, seedCredentials, type SnapshotData } from "./support/fakeServer";
+import { installFakeServer, seedCredentials, settlesCompletion, type SnapshotData } from "./support/fakeServer";
 import { pan, pinch } from "./support/gestures";
 
 // The primary target size from the map contract (section 1's test list). hasTouch is
@@ -336,7 +336,14 @@ function tickBoundaryFixture(): SnapshotData {
 }
 
 test("tick updates overlay, panel stays open", async ({ page }) => {
-  await installFakeServer(page, { snapshot: tickBoundaryFixture() });
+  // The band and health below are asserted on the SETTLED result, so the server has to
+  // keep the write. c1 has no recurrence, so completing it leaves the chore with no next
+  // date at all. Defect 15 in the testing sub-plan's register.
+  const snapshot = tickBoundaryFixture();
+  await installFakeServer(page, {
+    snapshot,
+    handler: settlesCompletion(snapshot, { nextDueAt: "", pointsAwarded: "21" }),
+  });
   await seedCredentials(page, "p1");
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();

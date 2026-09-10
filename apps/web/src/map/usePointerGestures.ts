@@ -61,6 +61,16 @@ export function usePointerGestures(
    *  here, not step-to-step, so a slow drag made of many small moves still cancels a
    *  pending double-tap once it has gone far enough in total. */
   const gestureOrigin = useRef<PointerSample | null>(null);
+  /**
+   * Set once a single-pointer gesture has moved past the tap slop, consumed by the
+   * very next `click`. Mouse-driven `click` fires whenever pointerdown and pointerup
+   * share a target element — with no regard for how far the pointer travelled between
+   * them — so a modest pan that happens to start and end over the same asset (its hit
+   * silhouette is generous; that is easy to do from anywhere near an asset's centre)
+   * would otherwise fire that asset's `onClick` and open its panel mid-drag. A real tap
+   * never sets this, so it is never suppressed.
+   */
+  const suppressNextClick = useRef(false);
 
   useEffect(() => {
     function localPoint(e: PointerEvent): PointerSample {
@@ -104,7 +114,15 @@ export function usePointerGestures(
       // (which is exactly what a pinch finger landing outside the map's own bounds,
       // per this function's top comment, would be) makes Chrome cancel the touch
       // outright rather than continue delivering its moves.
-      if (svg !== null && e.target instanceof Node && svg.contains(e.target)) {
+      //
+      // Never capture when the pointer went down on an asset, though: Chrome retargets
+      // the *compatibility mouse events* it synthesizes from a captured pointer to the
+      // capturing element — including `click` — so a captured `<svg>` steals the click
+      // an asset's own `onClick` (WU 18's tap-to-open-panel) needs to receive, and the
+      // event never reaches the `<g data-asset-id>` at all. A pan that happens to start
+      // on an asset still works fine without capture: these listeners are already
+      // global on `window`, so its moves keep arriving regardless.
+      if (svg !== null && e.target instanceof Node && svg.contains(e.target) && assetIdFor(e) === null) {
         try {
           svg.setPointerCapture(e.pointerId);
         } catch {
@@ -121,6 +139,7 @@ export function usePointerGestures(
       } else if (pointers.current.size === 1) {
         pinchStart.current = null;
         gestureOrigin.current = point;
+        suppressNextClick.current = false;
         const assetId = assetIdFor(e);
         const now = Date.now();
         const prior = lastTap.current;
@@ -165,6 +184,7 @@ export function usePointerGestures(
         const origin = gestureOrigin.current;
         if (origin !== null && distance(point, origin) > TAP_MOVE_SLOP_PX) {
           lastTap.current = null;
+          suppressNextClick.current = true;
         }
       }
     }
@@ -176,14 +196,31 @@ export function usePointerGestures(
       if (pointers.current.size === 0) setPointerActive(false);
     }
 
+    /**
+     * Consumes exactly one `click` after a gesture that moved past the tap slop —
+     * `stopPropagation` in the capture phase, before the event ever reaches the target
+     * `<g data-asset-id>` React attached `onClick` to, so the asset's own handler never
+     * runs. A genuine tap never sets `suppressNextClick`, so it reaches `onClick`
+     * (and `onKeyDown`'s Enter/Space path is untouched either way — it never goes
+     * through `click` at all).
+     */
+    function onClickCapture(e: MouseEvent): void {
+      if (!suppressNextClick.current) return;
+      suppressNextClick.current = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", endPointer);
     window.addEventListener("pointercancel", endPointer);
+    window.addEventListener("click", onClickCapture, true);
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", endPointer);
+      window.removeEventListener("click", onClickCapture, true);
       window.removeEventListener("pointercancel", endPointer);
     };
   }, [map, svgRef]);
