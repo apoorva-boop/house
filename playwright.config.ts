@@ -1,4 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
+import { devServerPort } from "./e2e/support/devServerPort";
+
+// One port per worktree, and never a borrowed server. Both halves of the reasoning
+// live in e2e/support/devServerPort.ts.
+const port = devServerPort(process.cwd());
+const origin = `http://127.0.0.1:${port}`;
 
 // Chromium only: this project has no cross-browser requirement yet.
 export default defineConfig({
@@ -13,14 +19,18 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:5173/house/",
+    baseURL: `${origin}/house/`,
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    // Port and strictPort live on apps/web/vite.config.ts's `server` option.
+    // Host and strictPort live on apps/web/vite.config.ts's `server` option; the port
+    // is handed over here so the suite and the server it starts always agree.
     command: "pnpm --filter @house/web run dev",
-    url: "http://127.0.0.1:5173/house/",
-    reuseExistingServer: !process.env.CI,
+    url: `${origin}/house/`,
+    env: { HOUSE_WEB_PORT: String(port) },
+    // Always our own server. Reusing one meant attaching to whatever checkout had the
+    // port, and this suite has tested the wrong worktree's code in both directions.
+    reuseExistingServer: false,
   },
 });
