@@ -11,6 +11,14 @@ export default defineConfig({
     outDir: "dist",
   },
   server: {
+    // Pinned to the IPv4 loopback, not left to default to "localhost". Node resolves
+    // `localhost` verbatim, so on a machine that answers ::1 first Vite binds IPv6 only
+    // and `http://127.0.0.1:5173` - which is what playwright.config.ts's baseURL and
+    // webServer.url both use - refuses the connection. The suite then dies on
+    // "Timed out waiting 60000ms from config.webServer" with a dev server that is
+    // demonstrably up, which is a miserable hour to spend. Both halves now name the
+    // same address.
+    host: "127.0.0.1",
     port: 5173,
     strictPort: true,
   },
