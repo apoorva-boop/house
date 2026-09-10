@@ -510,7 +510,10 @@ label {
   gap: 0.5rem;
   /* Above the panel scrim (10) and sheet (11): Flow 58 wants the zoom range reachable
      by someone who cannot pinch, even with a panel open, unlike the toolbar below --
-     which a modal is *supposed* to make inert. */
+     which a modal is *supposed* to make inert. For this number to mean anything the
+     controls must be rendered BESIDE the scrim, not inside `.map-screen`: a fixed
+     element is a stacking context, so a child of the map section can never paint
+     above the section's siblings, whatever its z-index (see MapScreen.tsx). */
   z-index: 12;
 }
 

@@ -122,6 +122,35 @@ export function MapScreen({ map, assetPanel, personPanel, onNavChores, onNavStat
         onAddChore={onAddChore}
       />
 
+      {/* Beside the scrim on purpose, not inside <Scene>'s `.map-screen` section. That
+          section is position: fixed, which makes it a stacking context of its own, so
+          nothing inside it -- whatever its z-index -- can paint above the scrim and the
+          sheet rendered below. Flow 58 needs the zoom range reachable with a panel open
+          by someone who cannot pinch, so the buttons live here, where their z-index 12
+          really does put them above the scrim (10) and the sheet (11). */}
+      <div className="map-zoom-controls">
+        <button
+          type="button"
+          data-testid="zoom-in"
+          aria-label="Zoom in"
+          onClick={() => {
+            map.zoomBy(1.25);
+          }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          data-testid="zoom-out"
+          aria-label="Zoom out"
+          onClick={() => {
+            map.zoomBy(0.8);
+          }}
+        >
+          &minus;
+        </button>
+      </div>
+
       {isOpen && <div data-testid="panel-scrim" className="panel-scrim" onClick={closePanel} />}
 
       {assetState.open && (

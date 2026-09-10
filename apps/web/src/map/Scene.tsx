@@ -26,6 +26,10 @@ import { poly, up, type Pt } from "../art/geometry.js";
  * them. That is the single most important structural rule here: parent a character
  * into the camera and the fairness signal it carries slides off-screen exactly when
  * someone is exploring the map, at the moment it is most wanted.
+ *
+ * The zoom buttons are NOT in here. `.map-screen` is position: fixed, so it is a
+ * stacking context of its own, and nothing inside it can paint above the panel scrim
+ * and sheet, which are its siblings. MapScreen.tsx renders them beside the scrim.
  */
 
 const ASSET_ORDER = ["house", "garden", "car"] as const;
@@ -194,29 +198,6 @@ export function Scene({ map, onSelectAsset, onSelectPerson, onNavChores, onNavSt
           <Character tier={character.tier} />
         </button>
       ))}
-
-      <div className="map-zoom-controls">
-        <button
-          type="button"
-          data-testid="zoom-in"
-          aria-label="Zoom in"
-          onClick={() => {
-            map.zoomBy(1.25);
-          }}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          data-testid="zoom-out"
-          aria-label="Zoom out"
-          onClick={() => {
-            map.zoomBy(0.8);
-          }}
-        >
-          &minus;
-        </button>
-      </div>
 
       <nav className="map-toolbar" aria-label="Primary">
         <button type="button" data-testid="nav-chores" onClick={onNavChores}>
