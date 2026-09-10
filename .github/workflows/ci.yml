@@ -74,24 +74,42 @@ jobs:
       - name: Bundle freshness stamp
         run: pnpm check:bundle
 
-      # ---------------------------------------------------------------------------
-      # NOT A GATE YET - AND THAT IS TEMPORARY.
+      # A GATE. The unit suite is 71 of 71.
       #
-      # The unit suite is written ahead of the implementation, so some of it is EXPECTED
-      # to fail. Gating on it now would block every PR until the last of that code lands.
-      #
-      # EXPECTED TO FAIL, exhaustively: `apps/web/src/map/Camera.test.ts`. That is the
-      # whole list. A failure in any other file is a real regression, whatever this step
-      # reports. Deliberately named as files rather than as a pass/fail count - a count
-      # is stale the moment anyone adds a test, and a stale count is worse than none.
-      #
-      # `continue-on-error: true` means this step reports its real result - a failing
-      # run shows as a failed step with its full output - but does not fail the job.
-      # Nothing here rewrites, filters or hides the vitest output.
-      #
-      # WHEN THE LAST FILE ABOVE GOES GREEN: delete both this comment and the
-      # `continue-on-error` line. From that point a failing unit test must fail CI.
-      # ---------------------------------------------------------------------------
-      - name: Unit tests (reported, not yet enforced - see comment above)
+      # It was reported-but-not-enforced while `apps/web/src/map/Camera.test.ts` was
+      # written ahead of its implementation - eight tests recorded red on 2026-09-01 and
+      # left red until PR 4. That file was the whole of the named list, it is green, and
+      # so the relaxation is gone: a failing unit test now fails the job.
+      - name: Unit tests
         run: pnpm test
-        continue-on-error: true
+
+  # The browser suite. Separate job because it needs a Chromium download and a Vite dev
+  # server, and there is no reason to make the fast checks above wait for either.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      # A GATE. All 25 browser tests pass, so a failing one is a regression.
+      #
+      # It has twice been relaxed while a batch of tests was written ahead of its
+      # implementation and recorded red - PR 3's twelve, then PR 4's thirteen for the
+      # map. Both batches are green, so both relaxations are gone. Relax it again only
+      # to record a new batch red, name the expected failures as tests rather than as a
+      # count, and tighten it the moment they pass.
+      - name: Playwright
+        run: pnpm e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

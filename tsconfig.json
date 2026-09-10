@@ -2,15 +2,17 @@
 // the workspaces that hold TypeScript, in dependency order, so `pnpm typecheck` from
 // the repo root typechecks all of them in one pass.
 //
-// relay/ and e2e/ have no TypeScript source yet. A composite project whose `include`
-// matches zero files is an error, so they get a tsconfig when they get their first
-// .ts file — not before. apps-script/ has source now, so it has one.
+// relay/ has no TypeScript source yet. A composite project whose `include`
+// matches zero files is an error, so it gets a tsconfig when it gets its first
+// .ts file — not before. apps-script/ has source now, so it has one. e2e/ gained
+// its first .ts file in PR 3, so it is referenced here too.
 {
   "files": [],
   "references": [
     { "path": "./packages/domain" },
     { "path": "./apps/web" },
     { "path": "./apps-script" },
-    { "path": "./apps-script/tsconfig.test.json" }
+    { "path": "./apps-script/tsconfig.test.json" },
+    { "path": "./e2e" }
   ]
 }

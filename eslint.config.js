@@ -15,6 +15,7 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
+      "**/.tsbuild/**",
       "apps-script/build/**",
       "playwright-report/**",
       "test-results/**",
@@ -195,6 +196,89 @@ export default tseslint.config(
           selector: "MemberExpression[object.name='performance'][property.name='now']",
           message:
             "packages/domain has no clock. Take the time from `ctx.now` — the first argument of every rule.",
+        },
+      ],
+    },
+  },
+
+  // Views render what a presenter already decided. This is PR 3's native-port
+  // insurance: a future iOS/Android port swaps every view for a native screen and
+  // keeps every presenter unchanged, but only if a view never reaches into the domain
+  // model directly.
+  //
+  // PR 4 puts view code in two more directories, so both are named here rather than
+  // left as a hole in the rule. `src/art` draws the isometric objects and `src/map`
+  // holds the scene and its pointer gestures -- both are views by every definition
+  // except their path. `src/map/Camera.ts` is not a view at all, it is pure maths, but
+  // it has no business importing the domain either, so one selector covers the
+  // directory.
+  {
+    files: [
+      "apps/web/src/views/**/*.{ts,tsx}",
+      "apps/web/src/art/**/*.{ts,tsx}",
+      "apps/web/src/map/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@house/domain", "@house/domain/*"],
+              message:
+                "A view renders what a presenter already decided. Flatten @house/domain values into primitives in the presenter — importing it here is the thing the native-port insurance forbids.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Presenters are plain TypeScript classes: no JSX, no DOM, no React import. A
+  // presenter receives `Storage` and `IDBFactory` as constructor dependencies instead
+  // of reading a browser global directly, which is what keeps it testable outside a
+  // browser and portable to a native port later.
+  {
+    files: ["apps/web/src/presenters/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["react", "react/*", "react-dom", "react-dom/*"],
+              message: "Presenters are plain TypeScript classes. React belongs in apps/web/src/views.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXElement",
+          message: "Presenters render nothing. JSX belongs in apps/web/src/views.",
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        { name: "window", message: "Presenters have no browser. Take what you need as a constructor dependency." },
+        { name: "document", message: "Presenters have no browser. Take what you need as a constructor dependency." },
+        {
+          name: "localStorage",
+          message: "Presenters receive `Storage` as a constructor dependency instead of reading this global.",
+        },
+        {
+          name: "sessionStorage",
+          message: "Presenters receive `Storage` as a constructor dependency instead of reading this global.",
+        },
+        {
+          name: "indexedDB",
+          message: "Presenters receive `IDBFactory` as a constructor dependency instead of reading this global.",
+        },
+        { name: "navigator", message: "Presenters have no browser. Take what you need as a constructor dependency." },
+        {
+          name: "fetch",
+          message: "Presenters do no I/O. src/gateway/SheetsGateway.ts is the only file that calls fetch.",
         },
       ],
     },

@@ -4,6 +4,8 @@ dist/
 *.tsbuildinfo
 test-results/
 playwright-report/
+apps/web/.tsbuild
+e2e/.tsbuild
 
 # Build artefact: the domain bundle esbuild produces for Apps Script.
 # Regenerate with `pnpm build:domain`.
