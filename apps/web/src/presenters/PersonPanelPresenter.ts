@@ -6,6 +6,7 @@ export interface PersonPanelViewState {
   readonly personId: string | null;
   readonly displayName: string;
   readonly tier: number;
+  readonly tierLabel: string;
   readonly points: number;
   readonly sharePct: number;
 }
@@ -19,9 +20,34 @@ const EMPTY_STATE: PersonPanelViewState = {
   personId: null,
   displayName: "",
   tier: 0,
+  tierLabel: "",
   points: 0,
   sharePct: 0,
 };
+
+/**
+ * The plain-English word for one of `fairness()`'s five exhaustion steps (0, 0.2,
+ * 0.4, 0.6, 0.8) -- `data-tier` stays the raw number for tests, but a person reads
+ * words, not a decimal. Mirrors the endpoints `Character.tsx` already names in its
+ * own pose comments ("fresh" at 0, "worn out" at 0.8). Falls back to the raw number
+ * so an unrecognised value is still visible rather than blank.
+ */
+function describeTier(tier: number): string {
+  switch (tier) {
+    case 0:
+      return "fresh";
+    case 0.2:
+      return "a little tired";
+    case 0.4:
+      return "tired";
+    case 0.6:
+      return "worn down";
+    case 0.8:
+      return "worn out";
+    default:
+      return String(tier);
+  }
+}
 
 /**
  * Derives the person panel entirely from `StatsPresenter`'s own `people` list — never
@@ -48,6 +74,7 @@ export class PersonPanelPresenter extends Presenter<PersonPanelViewState> {
       personId,
       displayName: person.displayName,
       tier: person.tier,
+      tierLabel: describeTier(person.tier),
       points: person.points,
       sharePct: person.sharePct,
     });
@@ -65,6 +92,7 @@ export class PersonPanelPresenter extends Presenter<PersonPanelViewState> {
       ...this.state,
       displayName: person.displayName,
       tier: person.tier,
+      tierLabel: describeTier(person.tier),
       points: person.points,
       sharePct: person.sharePct,
     });

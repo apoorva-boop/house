@@ -1,4 +1,5 @@
-import { SCENE_BOUNDS, shade } from "./layout.js";
+import { SCENE_BOUNDS } from "./layout.js";
+import { ArtTokens, shade } from "./ArtTokens.js";
 
 /**
  * The lot the property stands on: a single flat plane filling `SCENE_BOUNDS` exactly,
@@ -18,10 +19,18 @@ import { SCENE_BOUNDS, shade } from "./layout.js";
  * It is pure scenery: no `data-testid`, not focusable, and `pointer-events: none` so
  * it never steals a click or a drag start meant for one of the three assets drawn
  * over it.
+ *
+ * Also the one place `<ArtTokens/>` is rendered — every colour anywhere in the scene
+ * (and in the fixed `Character` overlays outside the `<svg>`, since a `:root` custom
+ * property is visible document-wide) depends on that `<style>` block existing exactly
+ * once, before anything tries to read one of its custom properties.
  */
 export function Ground() {
   const { x, y, w, h } = SCENE_BOUNDS;
   return (
-    <rect data-art="ground" x={x} y={y} width={w} height={h} fill={shade("#c7bd9e", "top")} pointerEvents="none" />
+    <>
+      <ArtTokens />
+      <rect data-art="ground" x={x} y={y} width={w} height={h} fill={shade("ground", "top")} pointerEvents="none" />
+    </>
   );
 }

@@ -65,16 +65,10 @@ export const LIGHT_RAMP = {
 
 export type Face = keyof typeof LIGHT_RAMP;
 
-/** Applies LIGHT_RAMP to a `#rrggbb` literal. The only sanctioned way to tone a face. */
-export function shade(hex: string, face: Face): string {
-  const m = LIGHT_RAMP[face];
-  const n = hex.replace("#", "");
-  const r = Math.min(255, Math.round(parseInt(n.slice(0, 2), 16) * m));
-  const g = Math.min(255, Math.round(parseInt(n.slice(2, 4), 16) * m));
-  const b = Math.min(255, Math.round(parseInt(n.slice(4, 6), 16) * m));
-  const hex2 = (v: number) => v.toString(16).padStart(2, "0");
-  return `#${hex2(r)}${hex2(g)}${hex2(b)}`;
-}
+// `shade()`/`tone()` — the toning functions House/Garden/Car/Character actually call —
+// now live in `ArtTokens.tsx`, alongside the light/dark palette they read from. That
+// file needs `Face`/`LIGHT_RAMP` from here; this file has no reason to know about the
+// palette, so the dependency runs one way only.
 
 // ---------------------------------------------------------------------------
 // Scene layout: one property, not three shapes in a row
@@ -106,9 +100,16 @@ export const HOUSE_FOOTPRINT: Footprint = { gx0: 0, gy0: 0, gx1: 5, gy1: 4 };
 export const GARDEN_FOOTPRINT: Footprint = { gx0: 5, gy0: 0, gx1: 8, gy1: 4 };
 export const CAR_FOOTPRINT: Footprint = { gx0: 1, gy0: 4, gx1: 3, gy1: 6 };
 
-/** Scene-pixel height each object's silhouette rises above its footprint's ground line. */
-export const HOUSE_LIFT = 110; // flat-roofed box: walls + roof cap combined
-export const GARDEN_LIFT = 20; // hedge crown
+/**
+ * Scene-pixel height each object's silhouette rises above its footprint's ground line —
+ * i.e. the height of that object's *highest point*, not any one face's wall height.
+ * House.tsx and Garden.tsx each split this into a wall/eave height and an extra peak
+ * height (a roof ridge, a tree canopy) internally; only the total is frozen here,
+ * because that total is what `ASSET_RECTS`/`SCENE_BOUNDS` and Scene.tsx's hit
+ * silhouettes are built from.
+ */
+export const HOUSE_LIFT = 120; // eaves + gable ridge
+export const GARDEN_LIFT = 54; // tree canopy (taller than the hedge beside it)
 export const CAR_LIFT = 34; // cabin roof
 
 function footprintRect(f: Footprint, lift: number): Rect {
@@ -176,10 +177,11 @@ const SCENE_H = Math.max(assetsBounds.h + MIN_MARGIN * 2, MIN_VIEWPORT_H + PAN_T
  *
  * **All three objects fit a 375x667 viewport at scale 1.** `assetsBounds` is computed
  * from the footprint corners through `isoToScreen`, the same function every object draws
- * with, so it is derived rather than guessed: x:[-120,192] = 312 wide, y:[-110,144] = 254
- * tall. Centred, that leaves 31px of slack each side horizontally and 206px vertically. A
- * future footprint or lift edit that overflows the width changes this immediately instead
- * of silently.
+ * with, so it is derived rather than guessed: x:[-120,192] = 312 wide, y:[-120,144] = 264
+ * tall (the art pass's pitched roof and tree raised `HOUSE_LIFT`/`GARDEN_LIFT`, which only
+ * ever grows this box upward, never sideways). Centred, that leaves 31px of slack each
+ * side horizontally and 201px vertically. A future footprint or lift edit that overflows
+ * the width changes this immediately instead of silently.
  *
  * **The map can be dragged.** 559x819 against 375x667 gives 92px of travel each way
  * horizontally and 76px vertically — comfortably more than any single drag, rather than a
@@ -187,7 +189,7 @@ const SCENE_H = Math.max(assetsBounds.h + MIN_MARGIN * 2, MIN_VIEWPORT_H + PAN_T
  *
  * And the property can never be lost off-screen, which is the clamp's whole purpose: at
  * the furthest horizontal pan the window still holds 251 of the property's 312 pixels,
- * and vertically it holds all 254 at both extremes. You can look around the grounds; you
+ * and vertically it holds all 264 at both extremes. You can look around the grounds; you
  * cannot lose the house.
  */
 export const SCENE_BOUNDS: Rect = {

@@ -36,11 +36,17 @@ export function PersonPanelView({
       onPointerUp={onPointerUp}
     >
       <h2 data-testid="person-panel-name">{state.displayName}</h2>
-      <span data-testid="person-panel-tier" data-tier={state.tier}>
-        Tier {state.tier}
-      </span>
-      <span data-testid="person-panel-points">{state.points}</span>
-      <span data-testid="person-panel-share">{state.sharePct}%</span>
+      {/* `data-tier` stays the raw fairness step for tests; `tierLabel` (the
+          presenter's job, same as the asset panel's band) is what a person reads. */}
+      <p className="panel-condition" data-testid="person-panel-tier" data-tier={state.tier}>
+        {state.tierLabel}
+      </p>
+      <p className="panel-condition">
+        <span data-testid="person-panel-points">{state.points}</span> points earned
+      </p>
+      <p className="panel-condition">
+        <span data-testid="person-panel-share">{state.sharePct}%</span> of the work
+      </p>
       <button type="button" data-testid="panel-close" onClick={onClose}>
         Close
       </button>

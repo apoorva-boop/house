@@ -41,7 +41,16 @@ export function AssetPanelView({
       onPointerUp={onPointerUp}
     >
       <h2 data-testid="panel-title">{state.label}</h2>
-      <span data-testid="panel-health">{state.health}</span>
+      {/* `panel-health` stays exactly the number (map contract's frozen e2e reads it
+          with toHaveText) -- the label and the band's words are siblings, never
+          inside it. `bandLabel` is the presenter's job (map contract section 6); this
+          view only renders what it is handed. */}
+      <p className="panel-condition">
+        <span data-testid="panel-health-label">Health</span>{" "}
+        <span data-testid="panel-health">{state.health}</span>
+        {" — "}
+        {state.bandLabel}
+      </p>
       <ul className="panel-chore-rows">
         {state.chores.map((chore) => (
           <li key={chore.id} data-testid="panel-chore-row" data-chore-id={chore.id} className="panel-chore-row">

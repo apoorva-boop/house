@@ -469,6 +469,38 @@ label {
   right: calc(0.75rem + var(--safe-right));
 }
 
+/*
+ * Landscape (contract section 3a): the side sheet reserves the right 45vw (below),
+ * so both characters move to the left edge -- the one side a sheet never occupies --
+ * stacked at reduced scale instead of sitting in the left/right corners portrait
+ * uses. Keyed to orientation, the one thing that tells us the short axis just became
+ * width, never to a device's own width. Still >=44x44 (48x72), still clear of the
+ * insets, still a plain size/position change -- the DOM stays exactly the siblings
+ * of <svg> the map contract fixes.
+ */
+@media (orientation: landscape) {
+  .map-character {
+    width: 48px;
+    height: 72px;
+  }
+
+  .map-character-left,
+  .map-character-right {
+    left: calc(0.75rem + var(--safe-left));
+    right: auto;
+  }
+
+  .map-character-right {
+    bottom: calc(0.75rem + var(--safe-bottom));
+    top: auto;
+  }
+
+  .map-character-left {
+    bottom: calc(0.75rem + var(--safe-bottom) + 72px + 0.5rem);
+    top: auto;
+  }
+}
+
 .map-zoom-controls {
   position: fixed;
   top: calc(0.75rem + var(--safe-top));
@@ -476,7 +508,22 @@ label {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  z-index: 2;
+  /* Above the panel scrim (10) and sheet (11): Flow 58 wants the zoom range reachable
+     by someone who cannot pinch, even with a panel open, unlike the toolbar below --
+     which a modal is *supposed* to make inert. */
+  z-index: 12;
+}
+
+@media (orientation: landscape) {
+  /*
+   * The side sheet claims the right 45vw whenever a panel is open (contract section
+   * 4). Anchoring zoom's right edge just outside that reserved width -- instead of
+   * the viewport's own right edge -- keeps it clear of the sheet in every state,
+   * without the position jumping the moment a panel opens or closes.
+   */
+  .map-zoom-controls {
+    right: calc(45vw + 0.75rem + var(--safe-right));
+  }
 }
 
 /* Top-left, mirroring the zoom controls' top-right, so both stay clear of the

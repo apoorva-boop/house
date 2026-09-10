@@ -46,11 +46,15 @@ function renderAssetArt(kind: string, band: string) {
  * drawn shapes do not, so a hex sized to the real silhouette is what makes a click on
  * one asset never register on its neighbour.
  */
-function hitSilhouette(footprint: { gx0: number; gy0: number; gx1: number; gy1: number }, lift: number): string {
+function hitSilhouette(
+  footprint: { gx0: number; gy0: number; gx1: number; gy1: number },
+  lift: number,
+  groundDrop = 0,
+): string {
   const A = isoToScreen(footprint.gx0, footprint.gy0);
-  const B = isoToScreen(footprint.gx1, footprint.gy0);
-  const C = isoToScreen(footprint.gx1, footprint.gy1);
-  const D = isoToScreen(footprint.gx0, footprint.gy1);
+  const B = up(isoToScreen(footprint.gx1, footprint.gy0), -groundDrop);
+  const C = up(isoToScreen(footprint.gx1, footprint.gy1), -groundDrop);
+  const D = up(isoToScreen(footprint.gx0, footprint.gy1), -groundDrop);
   const A2 = up(A, lift);
   const B2 = up(B, lift);
   const D2 = up(D, lift);
@@ -58,10 +62,23 @@ function hitSilhouette(footprint: { gx0: number; gy0: number; gx1: number; gy1: 
   return poly(hex);
 }
 
+/**
+ * A few details deliberately sit BELOW their object's footprint line, where the ground
+ * would otherwise cut them off: the house's doorstep and the car's wheels, both of which
+ * overhang by about 7.5px. The hexagon above is built from footprint corners, so without
+ * this it stops short of them and leaves a thin dead strip along the front of two of the
+ * three objects. 8px covers both with a little to spare.
+ *
+ * The artwork itself is filled and clickable, so a tap landing directly on a wheel
+ * already selects the car by bubbling; this is only about the small empty margin just
+ * past those corners. The garden's tree fits inside its hexagon already and needs none.
+ */
+const GROUND_OVERHANG_PX = 8;
+
 const HIT_SILHOUETTES: Readonly<Record<string, string>> = {
-  house: hitSilhouette(HOUSE_FOOTPRINT, HOUSE_LIFT),
+  house: hitSilhouette(HOUSE_FOOTPRINT, HOUSE_LIFT, GROUND_OVERHANG_PX),
   garden: hitSilhouette(GARDEN_FOOTPRINT, GARDEN_LIFT),
-  car: hitSilhouette(CAR_FOOTPRINT, CAR_LIFT),
+  car: hitSilhouette(CAR_FOOTPRINT, CAR_LIFT, GROUND_OVERHANG_PX),
 };
 
 /**

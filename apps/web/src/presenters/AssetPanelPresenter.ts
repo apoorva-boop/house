@@ -14,6 +14,7 @@ export interface AssetPanelViewState {
   readonly label: string;
   readonly health: number;
   readonly band: string;
+  readonly bandLabel: string;
   readonly chores: readonly AssetPanelChoreVM[];
 }
 
@@ -27,8 +28,32 @@ const EMPTY_STATE: AssetPanelViewState = {
   label: "",
   health: 0,
   band: "",
+  bandLabel: "",
   chores: [],
 };
+
+/**
+ * The plain-English word for a health band (Flow 59): `data-band` stays the raw
+ * `HealthBand` string for tests and styling, but a person reads words, not a
+ * hyphenated token. Falls back to the raw band so an unrecognised value is still
+ * visible rather than blank.
+ */
+function describeBand(band: string): string {
+  switch (band) {
+    case "immaculate":
+      return "immaculate";
+    case "dusty":
+      return "dusty";
+    case "grubby":
+      return "grubby";
+    case "damaged":
+      return "damaged";
+    case "broken-down":
+      return "broken down";
+    default:
+      return band;
+  }
+}
 
 /**
  * Derives the asset panel entirely from `ChoreListPresenter`'s own state — never calls
@@ -58,6 +83,7 @@ export class AssetPanelPresenter extends Presenter<AssetPanelViewState> {
       label: asset.label,
       health: asset.health,
       band: asset.band,
+      bandLabel: describeBand(asset.band),
       chores: this.#choresFor(assetId),
     });
   }
@@ -86,6 +112,7 @@ export class AssetPanelPresenter extends Presenter<AssetPanelViewState> {
       label: asset.label,
       health: asset.health,
       band: asset.band,
+      bandLabel: describeBand(asset.band),
       chores: this.#choresFor(assetId),
     });
   }
