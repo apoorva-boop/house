@@ -1,0 +1,15 @@
+{
+  "name": "push-spike",
+  "private": true,
+  "description": "Throwaway stop-loss spike for issue #6: can Declarative Web Push reach a real iPhone days after the home-screen app was closed?",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "keys": "web-push generate-vapid-keys"
+  },
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}
