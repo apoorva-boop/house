@@ -177,12 +177,12 @@ export class AppPresenter extends Presenter<AppViewState> {
 
   #onReady(c: Credentials): void {
     this.#wire(c);
-    // "map" is only where a *booted* app with existing credentials lands (contract
-    // section 7) -- finishing setup live in this same page load still goes straight to
-    // "chores", matching setup.spec.ts's "stores creds and loads snapshot" (not one of
-    // the five tests the contract calls out as needing a nav-chores click inserted,
-    // because it was never expecting to land anywhere else in the first place).
-    this.setState({ screen: "chores", credentials: c });
+    // The map is the home screen (plan section 3a: "Map -- app launch"). Finishing
+    // setup is the first launch, so it lands where every later launch lands. Until #12
+    // this went to "chores", which is what setup.spec.ts asserted; that test now
+    // reaches the chore list by the nav-chores click, the same one-line correction
+    // defects 9-13 made to five other tests (defect 16 in the testing register).
+    this.setState({ screen: "map", credentials: c });
   }
 
   navigate(screen: Screen): void {

@@ -146,3 +146,47 @@ test("375x667 targets all >= 44px", async ({ page }) => {
   await expect(page.getByTestId("asset-panel")).toBeVisible();
   await assertAllTargetsAtLeast44();
 });
+
+test("zoom buttons reach both limits with the side sheet open", async ({ page }) => {
+  // Landscape from the start: 375x667 turned on its side.
+  await page.setViewportSize({ width: 667, height: 375 });
+  await installFakeServer(page, { snapshot: baseAssets() });
+  await seedCredentials(page, "p1");
+  await page.goto("/");
+  await expect(page.getByTestId("map-screen")).toBeVisible();
+
+  const camera = page.getByTestId("camera");
+  await expect(camera).toHaveAttribute("data-scale", "1");
+
+  await page.locator('[data-testid="map-asset"][data-asset-id="house"]').click();
+  const panel = page.locator('[data-testid="asset-panel"][data-asset-id="house"]');
+  await expect(panel).toBeVisible();
+
+  // The side sheet, as "panel moves to side sheet" above defines it: anchored to the
+  // right edge, full height, under half the viewport width.
+  const sheet = await panel.boundingBox();
+  expect(sheet).not.toBeNull();
+  expect(sheet!.x + sheet!.width).toBeGreaterThan(667 - 5);
+  expect(sheet!.height).toBeGreaterThan(375 * 0.9);
+  expect(sheet!.width).toBeLessThan(667 * 0.5);
+
+  // Both zoom buttons sit beside the sheet -- not under it, and not floating on top of
+  // it either. Geometry before clicks: a button the sheet covers would otherwise only
+  // show up as a click that times out.
+  const zoomIn = page.getByTestId("zoom-in");
+  const zoomOut = page.getByTestId("zoom-out");
+  for (const button of [zoomIn, zoomOut]) {
+    const box = await button.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(sheet!.x);
+  }
+
+  // Flow 58: the whole 1x-3x range by button, with the panel open the whole time.
+  for (let i = 0; i < 20; i++) await zoomIn.click();
+  await expect(camera).toHaveAttribute("data-scale", "3");
+  await expect(panel).toBeVisible();
+
+  for (let i = 0; i < 20; i++) await zoomOut.click();
+  await expect(camera).toHaveAttribute("data-scale", "1");
+  await expect(panel).toBeVisible();
+});

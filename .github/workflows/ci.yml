@@ -74,7 +74,7 @@ jobs:
       - name: Bundle freshness stamp
         run: pnpm check:bundle
 
-      # A GATE. The unit suite is 71 of 71.
+      # A GATE. The unit suite is 75 of 75.
       #
       # It was reported-but-not-enforced while `apps/web/src/map/Camera.test.ts` was
       # written ahead of its implementation - eight tests recorded red on 2026-09-01 and
@@ -97,7 +97,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
 
-      # A GATE. All 25 browser tests pass, so a failing one is a regression.
+      # A GATE. All 28 browser tests pass, so a failing one is a regression.
       #
       # It has twice been relaxed while a batch of tests was written ahead of its
       # implementation and recorded red - PR 3's twelve, then PR 4's thirteen for the
