@@ -151,7 +151,7 @@ test("zoom buttons reach both limits with the side sheet open", async ({ page })
   // Landscape from the start: 375x667 turned on its side.
   await page.setViewportSize({ width: 667, height: 375 });
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
