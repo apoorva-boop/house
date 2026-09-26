@@ -15,6 +15,7 @@ import {
   seedHousehold,
   seedInstance,
   TEST_TIMEOUT_MS,
+  TIME_ZONE,
   type Household,
 } from "./testkit.js";
 
@@ -105,6 +106,63 @@ describe("auth", () => {
 
       expect(response.ok).toBe(false);
       expect(await readTab("Completions")).toHaveLength(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "tells each caller which person they are, and never hands out a token",
+    async () => {
+      // The snapshot is where a device learns its own identity. It cannot work it out
+      // from `people`, which carries no `token` column on purpose — publishing the other
+      // person's token to every device would make the one access control this
+      // deployment has meaningless. So `me` is the whole answer, and it has to be the
+      // person the TOKEN names, not anything the caller asked for.
+      const asA = await postEnvelope<{ me?: string; people?: Record<string, unknown>[] }>({
+        token: household.personA.token,
+        op: "snapshot",
+        mutationId: "",
+        payload: {},
+      });
+      expect(asA.ok).toBe(true);
+      expect(asA.data?.me).toBe(household.personA.id);
+
+      // The same request on the other person's token resolves to the other person. One
+      // deployment, one sheet, two answers — which is what makes this a fact about the
+      // token rather than about the household.
+      const asB = await postEnvelope<{ me?: string }>({
+        token: household.personB.token,
+        op: "snapshot",
+        mutationId: "",
+        payload: {},
+      });
+      expect(asB.ok).toBe(true);
+      expect(asB.data?.me).toBe(household.personB.id);
+
+      // The matching absence: no token reaches the client on any row.
+      for (const person of asA.data?.people ?? []) {
+        expect(person).not.toHaveProperty("token");
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "reports the household time zone from Meta, not the server's own",
+    async () => {
+      // `seedHousehold` writes `Meta.timeZone = Pacific/Auckland`. The client needs it
+      // because every domain rule takes the zone explicitly: without it the browser
+      // falls back to whatever the phone is set to, and the same chore reads overdue on
+      // one device and not on the other.
+      const response = await postEnvelope<{ timeZone?: string }>({
+        token: household.personA.token,
+        op: "snapshot",
+        mutationId: "",
+        payload: {},
+      });
+
+      expect(response.ok).toBe(true);
+      expect(response.data?.timeZone).toBe(TIME_ZONE);
     },
     TEST_TIMEOUT_MS,
   );

@@ -45,8 +45,8 @@ function fixture(): SnapshotData {
 }
 
 test("tiers unchanged until approval", async ({ page }) => {
-  await installFakeServer(page, { snapshot: fixture() });
-  await seedCredentials(page, "p1");
+  const server = await installFakeServer(page, { snapshot: fixture(), me: "p1" });
+  await seedCredentials(page);
   await page.goto("/");
   await page.getByTestId("nav-stats").click();
 
@@ -77,16 +77,12 @@ test("tiers unchanged until approval", async ({ page }) => {
   // Switch which person this device is acting as -- the reset handshake is explicitly
   // device-local, not account-local, so this is how "the other person" approves on one
   // shared device.
-  await page.evaluate(() => {
-    const raw = window.localStorage.getItem("house.credentials");
-    const creds = JSON.parse(raw as string);
-    window.localStorage.setItem("house.credentials", JSON.stringify({ ...creds, personId: "p2" }));
-  });
-  // Re-seed as p2. `seedCredentials` installs an init script that re-runs on EVERY
-  // navigation, so without this it would overwrite the line above and put the device
-  // back to p1 before the app boots -- and p1 correctly cannot approve their own
-  // proposal.
-  await seedCredentials(page, "p2");
+  //
+  // The switch is on the SERVER, not in localStorage. Who a device is is decided by the
+  // token, reported back as `me` on every snapshot, and no longer stored on the device
+  // at all -- so the only way to become the other person is for the server to say so.
+  // In real use that is the other person entering their own token; here it is one line.
+  server.me = "p2";
   await page.reload();
   await page.getByTestId("nav-stats").click();
 

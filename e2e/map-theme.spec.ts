@@ -166,7 +166,7 @@ async function expectLegible(page: Page, testIds: readonly string[], scheme: str
 
 test("the scene follows the theme, and each object stands clear of the ground", async ({ page }) => {
   await installFakeServer(page, { snapshot: threeAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
 
   const groundIn: Partial<Record<(typeof SCHEMES)[number], Rgb>> = {};
 
@@ -206,7 +206,7 @@ test("the scene follows the theme, and each object stands clear of the ground", 
 
 test("map controls and panels legible in light and dark", async ({ page }) => {
   await installFakeServer(page, { snapshot: withOverdueHouseChore() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
 
   for (const scheme of SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });

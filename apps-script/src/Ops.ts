@@ -229,9 +229,31 @@ globalThis.dueSweepTrigger = dueSweepTrigger;
 // snapshot
 // ---------------------------------------------------------------------------
 
-/** Everything a client needs to render, in one read. Served by `doGet` and `snapshot`. */
-function opSnapshot_(): unknown {
+/**
+ * Everything a client needs to render, in one read. Served by `doGet` and `snapshot`.
+ *
+ * Two of these fields are about the caller and its clock rather than the household's
+ * rows, and both exist because the client cannot work them out for itself.
+ *
+ * `me` is the People row this token belongs to. `people` deliberately carries no
+ * `token` column — publishing the other person's token to every device would make the
+ * one access control this deployment has meaningless — so without `me` a device that
+ * has just authenticated successfully still cannot tell which of the rows it is. It
+ * changes nothing about attribution: `opComplete_` still takes `personId` from the
+ * token and discards any the client sends. This only reports what the server already
+ * decided. For the test identity, which has no People row, it is "".
+ *
+ * `timeZone` is the household zone from `Meta`. The alternative is the browser's own
+ * zone, and the two disagree: the phone resolves whatever the phone is set to, so the
+ * same chore reads overdue on one device and not on the other, and a chore due 09:00
+ * local lands on a different calendar day depending on who is looking. Every domain
+ * rule takes the zone explicitly for exactly this reason; this is where the client
+ * gets the right one to pass.
+ */
+function opSnapshot_(identity: Identity): unknown {
   return {
+    me: identity.personId,
+    timeZone: householdTimeZone_(),
     people: readRows_("People").map((row) => ({
       id: row.values["id"],
       displayName: row.values["displayName"],

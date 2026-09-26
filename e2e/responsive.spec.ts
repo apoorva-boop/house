@@ -44,7 +44,7 @@ async function visibleControlBoxes(page: import("@playwright/test").Page): Promi
 test("panel moves to side sheet, camera preserved", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -84,7 +84,7 @@ test("panel moves to side sheet, camera preserved", async ({ page }) => {
 test("no control inside safe-area insets", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -127,7 +127,7 @@ test("no control inside safe-area insets", async ({ page }) => {
 test("375x667 targets all >= 44px", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 
@@ -151,7 +151,7 @@ test("zoom buttons reach both limits with the side sheet open", async ({ page })
   // Landscape from the start: 375x667 turned on its side.
   await page.setViewportSize({ width: 667, height: 375 });
   await installFakeServer(page, { snapshot: baseAssets() });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await expect(page.getByTestId("map-screen")).toBeVisible();
 

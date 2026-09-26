@@ -43,7 +43,7 @@ test("tick survives reload offline", async ({ page }) => {
   // The initial load must succeed -- the outage starts only once the household is on
   // screen, otherwise there would be nothing to tick.
   const server = await installFakeServer(page, { snapshot: fixture("c1", "Clean the gutters") });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   // The map is now the launch screen (contract section 7); reach the chore list from it.
   await page.getByTestId("nav-chores").click();
@@ -92,7 +92,7 @@ test("tick survives reload offline", async ({ page }) => {
 
 test("drop falls into queue", async ({ page }) => {
   const server = await installFakeServer(page, { snapshot: fixture("c2", "Check the smoke alarms") });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   // The map is now the launch screen (contract section 7); reach the chore list from it.
   await page.getByTestId("nav-chores").click();

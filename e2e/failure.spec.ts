@@ -71,7 +71,7 @@ test("no phantom completion on 500", async ({ page }) => {
     },
   });
 
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await page.getByTestId("nav-stats").click();
 

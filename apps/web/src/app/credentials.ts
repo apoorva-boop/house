@@ -1,7 +1,14 @@
+/**
+ * What this device needs to reach its household, and nothing more.
+ *
+ * There is no `personId` here. Who you are is not a device setting — it is a fact about
+ * the token, decided by the server, and it comes back on every snapshot as `me`. Storing
+ * a copy alongside the token would give the app two answers to one question and no way
+ * to tell which was stale.
+ */
 export interface Credentials {
   readonly execUrl: string;
   readonly token: string;
-  readonly personId: string;
 }
 
 const KEY = "house.credentials";
@@ -9,11 +16,9 @@ const KEY = "house.credentials";
 function isCredentials(value: unknown): value is Credentials {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  return (
-    typeof v["execUrl"] === "string" &&
-    typeof v["token"] === "string" &&
-    typeof v["personId"] === "string"
-  );
+  // A record written before `personId` was dropped still validates: the extra key is
+  // ignored rather than rejected, so an existing install is not thrown back to setup.
+  return typeof v["execUrl"] === "string" && typeof v["token"] === "string";
 }
 
 /** Malformed JSON reads as `null`, never throws. */

@@ -77,7 +77,7 @@ function fixture() {
 test("per-person and per-asset totals", async ({ page }) => {
   const { snapshot, windowPoints, p1Share, p2Share } = fixture();
   await installFakeServer(page, { snapshot });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   await page.getByTestId("nav-stats").click();
 

@@ -49,7 +49,7 @@ test("picture updates under 100ms", async ({ page }) => {
   // Latency is 15x the 100ms budget: if the row/health change lands inside 100ms, it
   // physically cannot be waiting on this response.
   const server = await installFakeServer(page, { snapshot: overdueFixture(), latencyMs: 1500 });
-  await seedCredentials(page, "p1");
+  await seedCredentials(page);
   await page.goto("/");
   // The map is now the launch screen (contract section 7); reach the chore list from it.
   await page.getByTestId("nav-chores").click();

@@ -122,7 +122,7 @@ function dispatch_(
     case "calendar.reconcile":
       return opCalendarReconcile_(payload);
     case "snapshot":
-      return opSnapshot_();
+      return opSnapshot_(identity);
 
     // The test-support namespace. `authenticate_` has already refused every one of these
     // unless TEST_MODE is "true" AND the token is TEST_TOKEN, so reaching this point is

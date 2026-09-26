@@ -2,17 +2,9 @@ import { Presenter } from "../app/Presenter.js";
 import { saveCredentials, type Credentials } from "../app/credentials.js";
 import type { Gateway } from "../gateway/SheetsGateway.js";
 
-export interface SetupPerson {
-  readonly id: string;
-  readonly displayName: string;
-}
-
 export interface SetupViewState {
   readonly execUrl: string;
   readonly token: string;
-  readonly stage: "credentials" | "person";
-  readonly people: readonly SetupPerson[];
-  readonly selectedPersonId: string;
   readonly busy: boolean;
   readonly error: string | null;
 }
@@ -23,19 +15,24 @@ export interface SetupPresenterDeps {
   readonly onReady: (c: Credentials) => void;
 }
 
+/**
+ * Setup is one stage: the script URL and the token, and nothing else.
+ *
+ * It used to ask "who are you?" afterwards and make you pick yourself off a list. That
+ * question was never a real one — the token already answers it, and the server has known
+ * the answer since the first request. The list existed only because the snapshot did not
+ * report `me`, so the app could not read the answer it had already been given, and
+ * letting the household choose meant a mistap silently attributed everything to the
+ * wrong person for as long as nobody noticed.
+ *
+ * The probe below is what replaces it. It still proves the URL and the token, and it now
+ * also proves the token resolves to somebody.
+ */
 export class SetupPresenter extends Presenter<SetupViewState> {
   readonly #deps: SetupPresenterDeps;
 
   constructor(deps: SetupPresenterDeps) {
-    super({
-      execUrl: "",
-      token: "",
-      stage: "credentials",
-      people: [],
-      selectedPersonId: "",
-      busy: false,
-      error: null,
-    });
+    super({ execUrl: "", token: "", busy: false, error: null });
     this.#deps = deps;
   }
 
@@ -47,7 +44,10 @@ export class SetupPresenter extends Presenter<SetupViewState> {
     this.setState({ ...this.state, token: v, error: null });
   }
 
-  /** Probes `snapshot`; on ok -> stage "person". Never echoes the token back. */
+  /**
+   * Probes `snapshot`; on success saves the credentials and hands them to `onReady`.
+   * Never echoes the token back into an error message.
+   */
   async submitCredentials(): Promise<void> {
     const execUrl = this.state.execUrl.trim();
     const token = this.state.token;
@@ -68,17 +68,24 @@ export class SetupPresenter extends Presenter<SetupViewState> {
         });
         return;
       }
-      const people: SetupPerson[] = envelope.data.people
-        .map((row) => ({ id: String(row["id"] ?? ""), displayName: String(row["displayName"] ?? "") }))
-        .filter((p) => p.id !== "");
-      this.setState({
-        ...this.state,
-        busy: false,
-        stage: "person",
-        people,
-        selectedPersonId: "",
-        error: null,
-      });
+      // The token is valid but belongs to nobody. On a current deployment that means the
+      // People row it came from has gone; on an older one it means the server predates
+      // `me` and cannot say. Either way the app would run without knowing whose taps
+      // these are, which is worse than refusing here where it can still be fixed.
+      if ((envelope.data.me ?? "") === "") {
+        this.setState({
+          ...this.state,
+          busy: false,
+          error:
+            "That script accepted the token but did not say who it belongs to. " +
+            "Check the token has a row in the People tab, and that the script is up to date.",
+        });
+        return;
+      }
+      const credentials: Credentials = { execUrl, token };
+      saveCredentials(this.#deps.store, credentials);
+      this.setState({ ...this.state, busy: false, error: null });
+      this.#deps.onReady(credentials);
     } catch {
       this.setState({
         ...this.state,
@@ -86,21 +93,5 @@ export class SetupPresenter extends Presenter<SetupViewState> {
         error: "Could not reach that script URL. Check it and your connection, then try again.",
       });
     }
-  }
-
-  selectPerson(id: string): void {
-    this.setState({ ...this.state, selectedPersonId: id });
-  }
-
-  /** Saves credentials, calls onReady. */
-  confirmPerson(): void {
-    if (this.state.selectedPersonId === "") return;
-    const credentials: Credentials = {
-      execUrl: this.state.execUrl.trim(),
-      token: this.state.token,
-      personId: this.state.selectedPersonId,
-    };
-    saveCredentials(this.#deps.store, credentials);
-    this.#deps.onReady(credentials);
   }
 }

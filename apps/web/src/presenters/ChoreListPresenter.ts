@@ -81,8 +81,10 @@ export interface ChoreListPresenterDeps {
   readonly gateway: Gateway;
   readonly queue: MutationQueue;
   readonly now: Clock;
-  readonly timeZone: string;
-  readonly personId: string;
+  /** The household zone, read live: the snapshot can change it after construction. */
+  readonly timeZone: () => string;
+  /** Who this device is, read live for the same reason. */
+  readonly personId: () => string;
   readonly newId: () => string;
 }
 
@@ -320,7 +322,7 @@ export class ChoreListPresenter extends Presenter<ChoreListViewState> {
     if (draft === null) return;
     this.setState({ ...this.state, busy: true });
 
-    const ctx = makeCtx(this.#deps.now, this.#deps.timeZone);
+    const ctx = makeCtx(this.#deps.now, this.#deps.timeZone());
     const recurrence = recurrenceFromDraft(draft);
     const isNew = draft.id === null;
     const id = draft.id ?? this.#deps.newId();
@@ -395,8 +397,8 @@ export class ChoreListPresenter extends Presenter<ChoreListViewState> {
   /** Recompute the household (base + queue overlay) and derive every view value from it. */
   async #render(): Promise<void> {
     const queued = await this.#deps.queue.list();
-    const ctx = makeCtx(this.#deps.now, this.#deps.timeZone);
-    const household = applyPending(ctx, this.#base, queued, this.#deps.personId);
+    const ctx = makeCtx(this.#deps.now, this.#deps.timeZone());
+    const household = applyPending(ctx, this.#base, queued, this.#deps.personId());
     this.#current = household;
 
     const pendingChoreIds = new Set<string>();
